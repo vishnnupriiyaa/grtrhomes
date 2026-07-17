@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  :root {
+        --background: 42 55% 96%;
+        --foreground: 24 30% 10%;
+        --card: 45 60% 99%;
+        --card-foreground: 24 30% 10%;
+        --popover: 45 60% 99%;
+        --popover-foreground: 24 30% 10%;
+        --primary: 38 68% 42%;
+        --primary-foreground: 45 60% 99%;
+        --secondary: 40 30% 90%;
+        --secondary-foreground: 24 30% 15%;
+        --muted: 40 30% 92%;
+        --muted-foreground: 30 15% 42%;
+        --accent: 38 68% 42%;
+        --accent-foreground: 45 60% 99%;
+        --destructive: 0 72% 45%;
+        --destructive-foreground: 45 60% 99%;
+        --border: 38 25% 84%;
+        --input: 38 25% 84%;
+        --ring: 38 68% 42%;
+        --chart-1: 38 68% 42%;
+        --chart-2: 160 40% 45%;
+        --chart-3: 24 40% 25%;
+        --chart-4: 45 60% 55%;
+        --chart-5: 12 60% 55%;
+        --radius: 0.75rem;
+    }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+}
