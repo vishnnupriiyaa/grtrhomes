@@ -78,27 +78,27 @@ const DashboardPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border/60 bg-card sticky top-0 z-30">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Home className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-bold">GRTR Homes</span>
+            <span className="font-bold text-sm md:text-base">GRTR Homes</span>
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium">{user.name}</p>
-              <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+              <p className="text-sm font-medium leading-tight">{user.name}</p>
+              <p className="text-xs text-muted-foreground capitalize leading-tight">{user.role}</p>
             </div>
-            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center font-semibold text-primary">
+            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center font-semibold text-primary text-sm">
               {user.name?.charAt(0)?.toUpperCase()}
             </div>
-            <Button variant="ghost" size="sm" onClick={logout}><LogOut className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="sm" onClick={logout} className="h-9 w-9 p-0 md:h-9 md:w-auto md:px-3"><LogOut className="h-4 w-4" /></Button>
           </div>
         </div>
       </nav>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 md:py-8">
         {loading ? (
           <div className="text-center py-20 text-muted-foreground">Loading...</div>
         ) : user.role === 'manager' ? (
@@ -123,13 +123,13 @@ const ManagerView = ({ user, properties, tickets, users, onRefresh }) => {
   }
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <p className="text-sm text-primary font-semibold uppercase tracking-wide">Manager Dashboard</p>
-          <h1 className="text-3xl font-bold mt-1">Welcome, {user.name}</h1>
+          <p className="text-xs md:text-sm text-primary font-semibold uppercase tracking-wide">Manager Dashboard</p>
+          <h1 className="text-2xl md:text-3xl font-bold mt-1">Welcome, {user.name}</h1>
         </div>
         <PropertyDialog user={user} users={users} onSaved={onRefresh}>
-          <Button className="rounded-full gap-2"><Plus className="h-4 w-4" /> Add Property</Button>
+          <Button className="rounded-full gap-2 self-start md:self-auto"><Plus className="h-4 w-4" /> Add Property</Button>
         </PropertyDialog>
       </div>
 
@@ -171,10 +171,10 @@ const OwnerView = ({ user, properties, tickets, onRefresh }) => {
   }
   return (
     <div>
-      <div className="mb-8">
-        <p className="text-sm text-primary font-semibold uppercase tracking-wide">Owner Portfolio</p>
-        <h1 className="text-3xl font-bold mt-1">Welcome, {user.name}</h1>
-        <p className="text-muted-foreground mt-1">Financial transparency across your entire portfolio.</p>
+      <div className="mb-6 md:mb-8">
+        <p className="text-xs md:text-sm text-primary font-semibold uppercase tracking-wide">Owner Portfolio</p>
+        <h1 className="text-2xl md:text-3xl font-bold mt-1">Welcome, {user.name}</h1>
+        <p className="text-sm md:text-base text-muted-foreground mt-1">Financial transparency across your entire portfolio.</p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StatCard icon={Building2} label="My Properties" value={stats.props} />
@@ -207,27 +207,27 @@ const TenantView = ({ user, properties, tickets, onRefresh }) => {
   nextRentDay.setDate(1); nextRentDay.setMonth(nextRentDay.getMonth() + 1)
   return (
     <div>
-      <div className="mb-8">
-        <p className="text-sm text-primary font-semibold uppercase tracking-wide">Tenant Portal</p>
-        <h1 className="text-3xl font-bold mt-1">Hi, {user.name}</h1>
+      <div className="mb-6 md:mb-8">
+        <p className="text-xs md:text-sm text-primary font-semibold uppercase tracking-wide">Tenant Portal</p>
+        <h1 className="text-2xl md:text-3xl font-bold mt-1">Hi, {user.name}</h1>
       </div>
       {!p ? <EmptyState msg="You have no active lease yet. Contact your property manager." /> : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
             <StatCard icon={Calendar} label="Lease Expires" value={formatDate(p.leaseEnd)} sub={daysUntil(p.leaseEnd) !== null ? `${daysUntil(p.leaseEnd)} days left` : ''} />
             <StatCard icon={DollarSign} label="Next Rent Due" value={formatCurrency(p.monthlyRent)} sub={formatDate(nextRentDay)} accent />
             <StatCard icon={Shield} label="Home Insurance" value={p.insuranceProvider || '—'} sub={p.insuranceEnd ? `Expires ${formatDate(p.insuranceEnd)}` : ''} link={p.insurancePortalUrl} />
           </div>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden mb-8">
+          <div className="bg-card border border-border rounded-2xl overflow-hidden mb-6 md:mb-8">
             <PropertyRow property={p} role="tenant" user={user} onRefresh={onRefresh} standalone />
           </div>
         </>
       )}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">My Maintenance Tickets</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h2 className="text-lg md:text-xl font-bold">My Maintenance Tickets</h2>
         {p && (
           <TicketDialog user={user} property={p} onSaved={onRefresh}>
-            <Button className="rounded-full gap-2"><Plus className="h-4 w-4" /> New Ticket</Button>
+            <Button className="rounded-full gap-2 self-start"><Plus className="h-4 w-4" /> New Ticket</Button>
           </TicketDialog>
         )}
       </div>
@@ -241,14 +241,14 @@ const TenantView = ({ user, properties, tickets, onRefresh }) => {
 
 /* ---------------- COMPONENTS ---------------- */
 const StatCard = ({ icon: Icon, label, value, sub, accent, link }) => (
-  <div className="bg-card border border-border rounded-2xl p-5">
-    <div className="flex items-center justify-between mb-3">
-      <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
-      <Icon className="h-4 w-4 text-primary" />
+  <div className="bg-card border border-border rounded-2xl p-4 md:p-5">
+    <div className="flex items-center justify-between mb-2 md:mb-3">
+      <p className="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+      <Icon className="h-4 w-4 text-primary shrink-0" />
     </div>
-    <p className={`text-2xl font-bold ${accent ? 'text-primary' : ''}`}>{value}</p>
-    {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-    {link && <a href={link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline mt-1 inline-block">Open portal ↗</a>}
+    <p className={`text-lg md:text-2xl font-bold break-words ${accent ? 'text-primary' : ''}`}>{value}</p>
+    {sub && <p className="text-[10px] md:text-xs text-muted-foreground mt-1">{sub}</p>}
+    {link && <a href={link} target="_blank" rel="noopener noreferrer" className="text-[10px] md:text-xs text-primary underline mt-1 inline-block">Open portal ↗</a>}
   </div>
 )
 
@@ -266,35 +266,35 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
   return (
     <div className={standalone ? 'p-0' : 'bg-card border border-border rounded-2xl overflow-hidden'}>
       <div className="md:flex">
-        <div className="md:w-72 shrink-0 aspect-[4/3] md:aspect-auto bg-muted relative">
+        <div className="md:w-64 lg:w-72 shrink-0 h-40 sm:h-52 md:h-auto md:aspect-auto bg-muted relative">
           {property.image ? (
             <img src={property.image} alt={property.address} className="absolute inset-0 w-full h-full object-cover" />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center"><Home className="h-12 w-12 text-muted-foreground/30" /></div>
           )}
         </div>
-        <div className="flex-1 p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <MapPin className="h-4 w-4" /> {property.address}
+        <div className="flex-1 p-4 md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-xs md:text-sm text-muted-foreground mb-1">
+                <MapPin className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{property.address}</span>
               </div>
-              <h3 className="text-lg font-bold">{property.name || property.address}</h3>
+              <h3 className="text-base md:text-lg font-bold truncate">{property.name || property.address}</h3>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 shrink-0">
               {(role === 'manager' || role === 'owner') && (
                 <>
                   <PropertyDialog user={user} users={users} existing={property} onSaved={onRefresh}>
-                    <Button variant="outline" size="sm" className="gap-1"><Edit className="h-3 w-3" /> Edit</Button>
+                    <Button variant="outline" size="sm" className="gap-1 h-8"><Edit className="h-3 w-3" /> <span className="hidden sm:inline">Edit</span></Button>
                   </PropertyDialog>
-                  {role === 'manager' && <Button variant="outline" size="sm" onClick={handleDelete}><Trash2 className="h-3 w-3" /></Button>}
+                  {role === 'manager' && <Button variant="outline" size="sm" className="h-8" onClick={handleDelete}><Trash2 className="h-3 w-3" /></Button>}
                 </>
               )}
-              <Button variant="ghost" size="sm" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Details'}</Button>
+              <Button variant="ghost" size="sm" className="h-8" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Details'}</Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
             <MiniField icon={Calendar} label="Lease" value={`${formatDate(property.leaseStart)} → ${formatDate(property.leaseEnd)}`} />
             <MiniField icon={DollarSign} label="Rent" value={formatCurrency(property.monthlyRent)} />
             {(role !== 'tenant') && <MiniField icon={User} label="Tenant" value={property.tenantName || 'Vacant'} />}
@@ -328,7 +328,7 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
 
                 {role === 'owner' && (
                   <DetailCard icon={Percent} title="Financial / Mortgage" accent="amber" fullWidth>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
                       <Row label="Loan provider" value={property.loanProvider} />
                       <Row label="Loan UID" value={property.loanAccountNumber} />
                       <Row label="Loan password" value={property.loanPassword ? '••••••••' : '—'} />
@@ -372,9 +372,9 @@ const ACCENT_MAP = {
   slate: 'bg-slate-100 text-slate-700 ring-slate-200/60',
 }
 const DetailCard = ({ icon: Icon, title, accent = 'emerald', fullWidth, children }) => (
-  <div className={`bg-muted/30 border border-border rounded-2xl p-5 ${fullWidth ? 'md:col-span-2' : ''}`}>
-    <div className="flex items-center gap-2 mb-4">
-      <div className={`h-8 w-8 rounded-lg ring-1 flex items-center justify-center ${ACCENT_MAP[accent]}`}>
+  <div className={`bg-muted/30 border border-border rounded-2xl p-4 md:p-5 ${fullWidth ? 'md:col-span-2' : ''}`}>
+    <div className="flex items-center gap-2 mb-3 md:mb-4">
+      <div className={`h-8 w-8 rounded-lg ring-1 flex items-center justify-center shrink-0 ${ACCENT_MAP[accent]}`}>
         <Icon className="h-4 w-4" />
       </div>
       <h4 className="font-semibold text-sm">{title}</h4>
@@ -383,12 +383,12 @@ const DetailCard = ({ icon: Icon, title, accent = 'emerald', fullWidth, children
   </div>
 )
 const Row = ({ label, value, strong, highlight, badge }) => (
-  <div className="flex items-baseline justify-between gap-4 py-1.5 border-b border-border/40 last:border-0">
-    <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+  <div className="flex items-baseline justify-between gap-3 py-2 border-b border-border/40 last:border-0">
+    <span className="text-[11px] md:text-xs text-muted-foreground shrink-0">{label}</span>
     {badge ? (
-      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ACCENT_MAP[badge]}`}>{value || '—'}</span>
+      <span className={`text-[11px] md:text-xs font-medium px-2 py-0.5 rounded-full ${ACCENT_MAP[badge]}`}>{value || '—'}</span>
     ) : (
-      <span className={`text-sm text-right break-words ${strong ? 'font-bold text-foreground' : 'font-medium'} ${highlight ? 'text-amber-700' : ''}`}>{value || '—'}</span>
+      <span className={`text-xs md:text-sm text-right break-all ${strong ? 'font-bold text-foreground' : 'font-medium'} ${highlight ? 'text-amber-700' : ''}`}>{value || '—'}</span>
     )}
   </div>
 )
@@ -403,24 +403,24 @@ const TicketRow = ({ ticket, property, canManage, onRefresh }) => {
   }
   const StatusIcon = ticket.status === 'resolved' ? CheckCircle2 : ticket.status === 'in_progress' ? Clock : AlertCircle
   return (
-    <div className="bg-card border border-border rounded-2xl p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
+    <div className="bg-card border border-border rounded-2xl p-4 md:p-5">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 md:gap-4">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge className={`${PRIORITY_COLORS[ticket.priority]} border-0 capitalize`}>{ticket.priority}</Badge>
-            <Badge className={`${STATUS_COLORS[ticket.status]} border-0 capitalize gap-1`}><StatusIcon className="h-3 w-3" />{ticket.status.replace('_', ' ')}</Badge>
-            <span className="text-xs text-muted-foreground">{formatDate(ticket.createdAt)}</span>
+            <Badge className={`${PRIORITY_COLORS[ticket.priority]} border-0 capitalize text-[10px] md:text-xs`}>{ticket.priority}</Badge>
+            <Badge className={`${STATUS_COLORS[ticket.status]} border-0 capitalize gap-1 text-[10px] md:text-xs`}><StatusIcon className="h-3 w-3" />{ticket.status.replace('_', ' ')}</Badge>
+            <span className="text-[10px] md:text-xs text-muted-foreground">{formatDate(ticket.createdAt)}</span>
           </div>
-          <h3 className="font-semibold mt-2">{ticket.title}</h3>
-          <p className="text-sm text-muted-foreground mt-1">{ticket.description}</p>
-          <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-            {property && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{property.address}</span>}
-            <span className="flex items-center gap-1"><User className="h-3 w-3" />{ticket.tenantName}</span>
+          <h3 className="font-semibold mt-2 text-sm md:text-base break-words">{ticket.title}</h3>
+          <p className="text-xs md:text-sm text-muted-foreground mt-1 break-words">{ticket.description}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px] md:text-xs text-muted-foreground">
+            {property && <span className="flex items-center gap-1 min-w-0"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{property.address}</span></span>}
+            <span className="flex items-center gap-1"><User className="h-3 w-3 shrink-0" />{ticket.tenantName}</span>
           </div>
         </div>
         {canManage && ticket.status !== 'resolved' && (
           <Select onValueChange={updateStatus} defaultValue={ticket.status}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full md:w-36 h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="open">Open</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>

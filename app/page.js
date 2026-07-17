@@ -32,20 +32,20 @@ const Hero = () => (
       <div className="absolute top-20 -left-20 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
       <div className="absolute bottom-0 right-1/4 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
     </div>
-    <div className="container mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
+    <div className="container mx-auto px-4 py-14 md:py-28 grid md:grid-cols-2 gap-10 md:gap-12 items-center">
       <div>
-        <div className="inline-flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1 mb-6 text-xs">
+        <div className="inline-flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1 mb-5 md:mb-6 text-xs">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-muted-foreground">Trusted by landlords across Central Texas</span>
         </div>
-        <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
           Premium Property <span className="text-primary">Management,</span>
-          <br />Simplified.
+          <br className="hidden sm:block" />Simplified.
         </h1>
-        <p className="mt-6 text-lg text-muted-foreground max-w-xl">
+        <p className="mt-5 md:mt-6 text-base md:text-lg text-muted-foreground max-w-xl">
           A trusted platform for landlords and tenants across Central Texas. Manage leases, track rent, and resolve maintenance — all in one place.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-6 md:mt-8 flex flex-wrap gap-3">
           <Link href="/login">
             <Button size="lg" className="rounded-full px-6 gap-2">
               Login / Sign up <ArrowRight className="h-4 w-4" />
@@ -64,7 +64,7 @@ const Hero = () => (
 )
 
 const HeroVisual = () => (
-  <div className="relative w-full max-w-md ml-auto">
+  <div className="relative w-full max-w-md mx-auto md:ml-auto md:mr-0">
     <PortfolioCard />
 
     {/* Floating chip: Rent received */}
@@ -151,12 +151,12 @@ const Features = () => {
           <h2 className="text-3xl md:text-4xl font-bold">Everything You Need</h2>
           <p className="text-muted-foreground mt-4">Built specifically for mid-sized portfolios. Get complete visibility into your properties without the bloat of enterprise software.</p>
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-4 md:gap-6">
           {items.map((f) => (
-            <div key={f.title} className="bg-card border border-border rounded-2xl p-8">
-              <div className="h-1 w-8 bg-primary rounded-full mb-8" />
+            <div key={f.title} className="bg-card border border-border rounded-2xl p-6 md:p-8">
+              <div className="h-1 w-8 bg-primary rounded-full mb-6 md:mb-8" />
               <f.icon className="h-7 w-7 text-primary" />
-              <h3 className="font-bold text-lg mt-6">{f.title}</h3>
+              <h3 className="font-bold text-lg mt-5 md:mt-6">{f.title}</h3>
               <p className="text-muted-foreground mt-3 text-sm leading-relaxed">{f.desc}</p>
             </div>
           ))}
