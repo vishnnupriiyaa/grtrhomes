@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Home, Shield, Building2, CreditCard, Wrench, Mail, TrendingUp, FileText, Users, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Home, Shield, Building2, CreditCard, Wrench, Mail, TrendingUp, FileText, Users, ArrowRight, CheckCircle2, Bell, DollarSign, Calendar, Sparkles } from 'lucide-react'
 
 const Nav = () => (
   <nav className="w-full border-b border-border/60 bg-background/80 backdrop-blur sticky top-0 z-40">
@@ -27,8 +27,17 @@ const Nav = () => (
 
 const Hero = () => (
   <section className="relative overflow-hidden">
+    {/* Ambient background blobs */}
+    <div className="pointer-events-none absolute inset-0 -z-10">
+      <div className="absolute top-20 -left-20 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
+      <div className="absolute bottom-0 right-1/4 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
+    </div>
     <div className="container mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
       <div>
+        <div className="inline-flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1 mb-6 text-xs">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-muted-foreground">Trusted by landlords across Central Texas</span>
+        </div>
         <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
           Premium Property <span className="text-primary">Management,</span>
           <br />Simplified.
@@ -49,9 +58,56 @@ const Hero = () => (
           </a>
         </div>
       </div>
-      <PortfolioCard />
+      <HeroVisual />
     </div>
   </section>
+)
+
+const HeroVisual = () => (
+  <div className="relative w-full max-w-md ml-auto">
+    <PortfolioCard />
+
+    {/* Floating chip: Rent received */}
+    <div className="hidden md:flex absolute -left-16 top-8 items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3 shadow-lg animate-float">
+      <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+        <DollarSign className="h-5 w-5 text-emerald-600" />
+      </div>
+      <div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Rent received</p>
+        <p className="text-sm font-bold">+$2,450.00</p>
+      </div>
+    </div>
+
+    {/* Floating chip: Ticket resolved */}
+    <div className="hidden md:flex absolute -left-10 -bottom-8 items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3 shadow-lg animate-float-slow">
+      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+        <Wrench className="h-5 w-5 text-primary" />
+      </div>
+      <div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ticket resolved</p>
+        <p className="text-sm font-bold">AC repaired · 1h ago</p>
+      </div>
+    </div>
+
+    {/* Floating chip: Lease renewal */}
+    <div className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3 shadow-lg animate-float-slower">
+      <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+        <Calendar className="h-5 w-5 text-amber-600" />
+      </div>
+      <div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Renewal in</p>
+        <p className="text-sm font-bold">30 days</p>
+      </div>
+    </div>
+
+    {/* Floating chip: Notification */}
+    <div className="hidden md:flex absolute -right-14 -top-6 items-center gap-2 bg-card border border-border rounded-full pl-1 pr-3 py-1 shadow-lg animate-float">
+      <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
+        <Bell className="h-3.5 w-3.5 text-primary-foreground" />
+      </div>
+      <p className="text-xs font-medium">New ticket · Kurt</p>
+    </div>
+  </div>
 )
 
 const PortfolioCard = () => (

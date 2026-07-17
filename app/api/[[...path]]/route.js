@@ -155,67 +155,220 @@ async function handleRoute(request, { params }) {
       }
     }
 
-    /* ---------- SEED ---------- */
+    /* ---------- SEED (real portfolio data) ---------- */
     if (route === '/seed' && method === 'POST') {
       await db.collection('users').deleteMany({})
       await db.collection('properties').deleteMany({})
       await db.collection('tickets').deleteMany({})
 
-      const manager = { id: uuidv4(), name: 'Rachel Cooper', email: 'manager@grtr.com', password: 'demo123', phone: '512-555-0100', role: 'manager', createdAt: new Date().toISOString() }
-      const owner = { id: uuidv4(), name: 'James Whitmore', email: 'owner@grtr.com', password: 'demo123', phone: '512-555-0200', role: 'owner', createdAt: new Date().toISOString() }
-      const owner2 = { id: uuidv4(), name: 'Sofia Martinez', email: 'sofia@grtr.com', password: 'demo123', phone: '512-555-0201', role: 'owner', createdAt: new Date().toISOString() }
-      const tenant = { id: uuidv4(), name: 'Alex Rivera', email: 'tenant@grtr.com', password: 'demo123', phone: '512-555-0300', role: 'tenant', createdAt: new Date().toISOString() }
-      const tenant2 = { id: uuidv4(), name: 'Emma Chen', email: 'emma@grtr.com', password: 'demo123', phone: '512-555-0301', role: 'tenant', createdAt: new Date().toISOString() }
-      await db.collection('users').insertMany([manager, owner, owner2, tenant, tenant2])
+      const nowIso = new Date().toISOString()
+      // Parse dates like "MM/DD/YYYY" or "Mon D, YYYY" into ISO
+      const iso = (s) => { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toISOString() }
 
-      const today = new Date()
-      const inMonths = (m) => { const d = new Date(today); d.setMonth(d.getMonth() + m); return d.toISOString() }
+      // ---- USERS ----
+      const manager = { id: uuidv4(), name: 'Rachel Cooper', email: 'manager@grtr.com', password: 'demo123', phone: '512-555-0100', role: 'manager', createdAt: nowIso }
 
-      const properties = [
+      // Two owners from spreadsheet
+      const ownerBTS = { id: uuidv4(), name: 'BTS Rinu', email: 'btsrinu@gmail.com', password: 'demo123', phone: '512-555-1000', role: 'owner', createdAt: nowIso }
+      const ownerRavi = { id: uuidv4(), name: 'Ravi Nasika', email: 'ravi.nasika@gmail.com', password: 'demo123', phone: '512-555-2000', role: 'owner', createdAt: nowIso }
+
+      // Tenants (each gets a portal account)
+      const tMike     = { id: uuidv4(), name: 'Mike Jones',        email: 'jones099672@yahoo.com', password: 'demo123', phone: '713-252-4874', role: 'tenant', createdAt: nowIso }
+      const tTeresa   = { id: uuidv4(), name: 'Teresa Collier',    email: '4tacollier@gmail.com',  password: 'demo123', phone: '830-500-0800', role: 'tenant', createdAt: nowIso }
+      const tRandall  = { id: uuidv4(), name: 'Randall Whitfield', email: 'newmillsen@gmail.com',  password: 'demo123', phone: '512-791-2905', role: 'tenant', createdAt: nowIso }
+      const tKurt     = { id: uuidv4(), name: 'Kurt B Grindstaff', email: 'kurtb@example.com',     password: 'demo123', phone: '803-305-5165', role: 'tenant', createdAt: nowIso }
+      const tSteven   = { id: uuidv4(), name: 'Stevenson Runyon',  email: 'sgrunyon7@aol.com',     password: 'demo123', phone: '512-555-3001', role: 'tenant', createdAt: nowIso }
+      const tSamantha = { id: uuidv4(), name: 'Samantha Bender',   email: 'sjbender13@gmail.com',  password: 'demo123', phone: '307-272-2505', role: 'tenant', createdAt: nowIso }
+      const tAdam     = { id: uuidv4(), name: 'Adam',              email: 'adam@example.com',      password: 'demo123', phone: '512-555-3003', role: 'tenant', createdAt: nowIso }
+      const tKeith    = { id: uuidv4(), name: 'Keith',             email: 'keith@example.com',     password: 'demo123', phone: '512-555-3004', role: 'tenant', createdAt: nowIso }
+
+      // Also add a quick-demo tenant alias
+      const tDemo = { id: uuidv4(), name: 'Alex Rivera (Demo)', email: 'tenant@grtr.com', password: 'demo123', phone: '512-555-0300', role: 'tenant', createdAt: nowIso }
+      // demo owner alias
+      const oDemo = { id: uuidv4(), name: 'James Whitmore (Demo)', email: 'owner@grtr.com', password: 'demo123', phone: '512-555-0200', role: 'owner', createdAt: nowIso }
+
+      await db.collection('users').insertMany([manager, ownerBTS, ownerRavi, tMike, tTeresa, tRandall, tKurt, tSteven, tSamantha, tAdam, tKeith, tDemo, oDemo])
+
+      const houseImgs = [
+        'https://images.pexels.com/photos/19344325/pexels-photo-19344325.jpeg',
+        'https://images.pexels.com/photos/11018246/pexels-photo-11018246.jpeg',
+        'https://images.unsplash.com/photo-1628624747186-a941c476b7ef',
+        'https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg',
+        'https://images.pexels.com/photos/30580640/pexels-photo-30580640.jpeg',
+        'https://images.unsplash.com/photo-1570129477492-45c003edd2be',
+        'https://images.pexels.com/photos/19344325/pexels-photo-19344325.jpeg',
+        'https://images.pexels.com/photos/11018246/pexels-photo-11018246.jpeg',
+        'https://images.unsplash.com/photo-1628624747186-a941c476b7ef',
+      ]
+      let imgIdx = 0
+      const nextImg = () => houseImgs[imgIdx++ % houseImgs.length]
+
+      // ---- OWNER BTS Rinu — 5 properties ----
+      const btsProps = [
         {
-          id: uuidv4(), name: 'Sunset Ridge', address: '2100 Oak Meadow Dr, Austin TX 78745',
-          image: 'https://images.pexels.com/photos/19344325/pexels-photo-19344325.jpeg',
-          ownerId: owner.id, ownerName: owner.name,
-          tenantId: tenant.id, tenantName: tenant.name, tenantEmail: tenant.email, tenantPhone: tenant.phone,
-          managerId: manager.id, managerName: manager.name,
-          leaseStart: inMonths(-6), leaseEnd: inMonths(6), monthlyRent: 2450, securityDeposit: 2450,
-          insuranceProvider: 'State Farm', insurancePolicyNumber: 'SF-88291-TX', insuranceStart: inMonths(-3), insuranceEnd: inMonths(9),
-          loanProvider: 'Chase Bank', loanAccountNumber: 'CH-4021-88', roi: 6.75, monthlyEmi: 1820, loanPortalUrl: 'https://chase.com',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: uuidv4(), name: 'Cedar Park Villa', address: '450 Cedar Ln, Round Rock TX 78664',
-          image: 'https://images.pexels.com/photos/11018246/pexels-photo-11018246.jpeg',
-          ownerId: owner.id, ownerName: owner.name,
-          tenantId: tenant2.id, tenantName: tenant2.name, tenantEmail: tenant2.email, tenantPhone: tenant2.phone,
-          managerId: manager.id, managerName: manager.name,
-          leaseStart: inMonths(-2), leaseEnd: inMonths(10), monthlyRent: 3100, securityDeposit: 3100,
-          insuranceProvider: 'Allstate', insurancePolicyNumber: 'AL-77213-TX', insuranceStart: inMonths(-1), insuranceEnd: inMonths(11),
-          loanProvider: 'Wells Fargo', loanAccountNumber: 'WF-9982-11', roi: 7.10, monthlyEmi: 2210, loanPortalUrl: 'https://wellsfargo.com',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: uuidv4(), name: 'Hilltop Retreat', address: '78 Ranch Rd, Dripping Springs TX 78620',
-          image: 'https://images.unsplash.com/photo-1628624747186-a941c476b7ef',
-          ownerId: owner2.id, ownerName: owner2.name,
+          id: uuidv4(), name: 'Siragusa Residence', address: '5704 Siragusa Dr, Austin, TX 78738', image: nextImg(),
+          ownerId: ownerBTS.id, ownerName: ownerBTS.name,
           tenantId: '', tenantName: '', tenantEmail: '', tenantPhone: '',
           managerId: manager.id, managerName: manager.name,
-          leaseStart: '', leaseEnd: '', monthlyRent: 3800, securityDeposit: 0,
-          insuranceProvider: 'Liberty Mutual', insurancePolicyNumber: 'LM-33218-TX', insuranceStart: inMonths(-4), insuranceEnd: inMonths(8),
-          loanProvider: 'Bank of America', loanAccountNumber: 'BOA-5501-22', roi: 6.95, monthlyEmi: 2680, loanPortalUrl: 'https://bofa.com',
-          createdAt: new Date().toISOString(),
+          leaseType: '', leaseStart: '', leaseEnd: '', monthlyRent: 2400, securityDeposit: 0,
+          insuranceProvider: '', insurancePolicyNumber: '', insurancePortalUrl: '',
+          insuranceStart: iso('Aug 7, 2025'), insuranceEnd: iso('Aug 8, 2026'),
+          loanProvider: 'Lakeview / Mr Cooper', loanAccountNumber: 'btsr', loanPassword: 'SreSri1977!',
+          loanPortalUrl: '', roi: '', monthlyEmi: 2274.65, escrow: false,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'Traviston Home', address: '5415 Traviston Dr, Austin, TX 78738', image: nextImg(),
+          ownerId: ownerBTS.id, ownerName: ownerBTS.name,
+          tenantId: tMike.id, tenantName: tMike.name, tenantEmail: tMike.email, tenantPhone: tMike.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: 'Fixed', leaseStart: '', leaseEnd: iso('04/01/2027'), monthlyRent: 2200, securityDeposit: 2200,
+          insuranceProvider: 'Steadily', insurancePolicyNumber: '', insurancePortalUrl: 'https://app.steadily.com/customer/policies',
+          insuranceStart: iso('02/08/2026'), insuranceEnd: iso('02/08/2027'),
+          loanProvider: 'PNC', loanAccountNumber: 'btsr1', loanPassword: 'SysArm2008',
+          loanPortalUrl: 'https://www.pnc.com', roi: '', monthlyEmi: 1249.78, escrow: false,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'Lost Maples House', address: '366 Lost Maples, New Braunfels, TX', image: nextImg(),
+          ownerId: ownerBTS.id, ownerName: ownerBTS.name,
+          tenantId: tTeresa.id, tenantName: tTeresa.name, tenantEmail: tTeresa.email, tenantPhone: tTeresa.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: 'MTM', leaseStart: '', leaseEnd: '', monthlyRent: 1900, securityDeposit: 1900,
+          insuranceProvider: 'SageSure', insurancePolicyNumber: '', insurancePortalUrl: 'https://my.sagesure.com/',
+          insuranceStart: iso('Sep 29, 2025'), insuranceEnd: iso('Sep 29, 2026'),
+          loanProvider: 'Mr Cooper', loanAccountNumber: 'btsr', loanPassword: 'SreSri1977!',
+          loanPortalUrl: 'https://www.mrcooper.com', roi: '', monthlyEmi: 1077.14, escrow: false,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'Lone Peak Retreat', address: '868 Lone Peak Way, Dripping Springs, TX 78620', image: nextImg(),
+          ownerId: ownerBTS.id, ownerName: ownerBTS.name,
+          tenantId: tRandall.id, tenantName: tRandall.name, tenantEmail: tRandall.email, tenantPhone: tRandall.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: 'MTM', leaseStart: '', leaseEnd: iso('02/27/2026'), monthlyRent: 2600, securityDeposit: 2600,
+          insuranceProvider: 'MSI/MGA', insurancePolicyNumber: '', insurancePortalUrl: 'https://apps.msimga.com/Policy/Documents',
+          insuranceStart: '', insuranceEnd: iso('02/27/2026'),
+          loanProvider: 'Newrez / Shellpoint', loanAccountNumber: 'gmail', loanPassword: 'SreSriLonPea1977!',
+          loanPortalUrl: 'https://www.newrez.com', roi: 6.13, monthlyEmi: 1733.92, escrow: false,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'El Capitan Estate', address: '256 El Capitan Lp, Dripping Springs, TX 78620', image: nextImg(),
+          ownerId: ownerBTS.id, ownerName: ownerBTS.name,
+          tenantId: tKurt.id, tenantName: tKurt.name, tenantEmail: tKurt.email, tenantPhone: tKurt.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: 'Fixed', leaseStart: '', leaseEnd: iso('04/30/2027'), monthlyRent: 3200, securityDeposit: 3200,
+          insuranceProvider: 'SageSure', insurancePolicyNumber: '', insurancePortalUrl: 'https://my.sagesure.com/',
+          insuranceStart: iso('03/12/2026'), insuranceEnd: iso('03/12/2027'), insuranceRenewalAmount: 2539.30,
+          loanProvider: 'loanDepot', loanAccountNumber: 'gmail', loanPassword: 'SreSriLonPea1977!',
+          loanPortalUrl: 'https://www.loandepot.com', roi: '', monthlyEmi: 2980.58, escrow: false,
+          createdAt: nowIso,
         },
       ]
-      await db.collection('properties').insertMany(properties)
 
+      // ---- OWNER Ravi Nasika — 4 properties ----
+      const raviProps = [
+        {
+          id: uuidv4(), name: 'Traviston Home II', address: '5309 Traviston Dr, Austin, TX 78738', image: nextImg(),
+          ownerId: ownerRavi.id, ownerName: ownerRavi.name,
+          tenantId: tSteven.id, tenantName: tSteven.name, tenantEmail: tSteven.email, tenantPhone: tSteven.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: '', leaseStart: '', leaseEnd: '', monthlyRent: 2500, securityDeposit: 2500,
+          insuranceProvider: '', insurancePolicyNumber: '', insurancePortalUrl: '',
+          insuranceStart: '', insuranceEnd: '',
+          loanProvider: '', loanAccountNumber: '', loanPassword: '',
+          loanPortalUrl: '', roi: '', monthlyEmi: 0, escrow: false,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'Lone Peak Villa', address: '862 Lone Peak Way, Dripping Springs, TX 78620', image: nextImg(),
+          ownerId: ownerRavi.id, ownerName: ownerRavi.name,
+          tenantId: tSamantha.id, tenantName: tSamantha.name, tenantEmail: tSamantha.email, tenantPhone: tSamantha.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: '', leaseStart: '', leaseEnd: '', monthlyRent: 3400, securityDeposit: 3400,
+          insuranceProvider: '', insurancePolicyNumber: '', insurancePortalUrl: '',
+          insuranceStart: '', insuranceEnd: '',
+          loanProvider: 'Lakeview / Mr Cooper', loanAccountNumber: 'btsr', loanPassword: 'SreSri1977!',
+          loanPortalUrl: 'https://www.mrcooper.com', roi: '', monthlyEmi: 3162.31, escrow: true,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'El Capitan 200', address: '200 El Capitan Lp, Dripping Springs, TX 78620', image: nextImg(),
+          ownerId: ownerRavi.id, ownerName: ownerRavi.name,
+          tenantId: tAdam.id, tenantName: tAdam.name, tenantEmail: tAdam.email, tenantPhone: tAdam.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: '', leaseStart: '', leaseEnd: '', monthlyRent: 3000, securityDeposit: 0,
+          insuranceProvider: '', insurancePolicyNumber: '', insurancePortalUrl: '',
+          insuranceStart: '', insuranceEnd: '',
+          loanProvider: '', loanAccountNumber: '', loanPassword: '',
+          loanPortalUrl: '', roi: '', monthlyEmi: 0, escrow: false,
+          createdAt: nowIso,
+        },
+        {
+          id: uuidv4(), name: 'El Capitan 386', address: '386 El Capitan Lp, Dripping Springs, TX 78620', image: nextImg(),
+          ownerId: ownerRavi.id, ownerName: ownerRavi.name,
+          tenantId: tKeith.id, tenantName: tKeith.name, tenantEmail: tKeith.email, tenantPhone: tKeith.phone,
+          managerId: manager.id, managerName: manager.name,
+          leaseType: '', leaseStart: '', leaseEnd: '', monthlyRent: 3100, securityDeposit: 0,
+          insuranceProvider: '', insurancePolicyNumber: '', insurancePortalUrl: '',
+          insuranceStart: '', insuranceEnd: '',
+          loanProvider: '', loanAccountNumber: '', loanPassword: '',
+          loanPortalUrl: '', roi: '', monthlyEmi: 0, escrow: false,
+          createdAt: nowIso,
+        },
+      ]
+
+      // Also give demo owner one property for the "one-click Owner demo" button so demo makes sense
+      const demoProp = {
+        id: uuidv4(), name: 'Demo Property', address: '2100 Oak Meadow Dr, Austin TX 78745', image: nextImg(),
+        ownerId: oDemo.id, ownerName: oDemo.name,
+        tenantId: tDemo.id, tenantName: tDemo.name, tenantEmail: tDemo.email, tenantPhone: tDemo.phone,
+        managerId: manager.id, managerName: manager.name,
+        leaseType: 'Fixed', leaseStart: iso(new Date(Date.now() - 86400000*180).toISOString()),
+        leaseEnd: iso(new Date(Date.now() + 86400000*180).toISOString()),
+        monthlyRent: 2450, securityDeposit: 2450,
+        insuranceProvider: 'State Farm', insurancePolicyNumber: 'SF-88291-TX', insurancePortalUrl: '',
+        insuranceStart: iso(new Date(Date.now() - 86400000*90).toISOString()),
+        insuranceEnd: iso(new Date(Date.now() + 86400000*270).toISOString()),
+        loanProvider: 'Chase Bank', loanAccountNumber: 'CH-4021-88', loanPassword: '',
+        loanPortalUrl: 'https://chase.com', roi: 6.75, monthlyEmi: 1820, escrow: false,
+        createdAt: nowIso,
+      }
+
+      const allProps = [...btsProps, ...raviProps, demoProp]
+      await db.collection('properties').insertMany(allProps)
+
+      // ---- Sample tickets ----
+      const mkTicket = (prop, tenant, title, description, priority, status, daysAgo) => ({
+        id: uuidv4(), propertyId: prop.id, propertyAddress: prop.address,
+        tenantId: tenant.id, tenantName: tenant.name, tenantEmail: tenant.email,
+        ownerId: prop.ownerId, managerId: manager.id,
+        title, description, priority, status,
+        createdAt: new Date(Date.now() - 86400000 * daysAgo).toISOString(),
+        notifications: [
+          { to: prop.ownerName, method: 'email', at: nowIso },
+          { to: manager.name, method: 'email', at: nowIso },
+        ],
+      })
       const tickets = [
-        { id: uuidv4(), propertyId: properties[0].id, propertyAddress: properties[0].address, tenantId: tenant.id, tenantName: tenant.name, tenantEmail: tenant.email, ownerId: owner.id, managerId: manager.id, title: 'Kitchen faucet leaking', description: 'The cold water faucet in the kitchen has a slow leak — water pooling under the sink.', priority: 'medium', status: 'open', createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
-        { id: uuidv4(), propertyId: properties[0].id, propertyAddress: properties[0].address, tenantId: tenant.id, tenantName: tenant.name, tenantEmail: tenant.email, ownerId: owner.id, managerId: manager.id, title: 'AC not cooling properly', description: 'Living room stays at 78°F even when set to 72°F. Started yesterday.', priority: 'high', status: 'in_progress', createdAt: new Date(Date.now() - 86400000 * 4).toISOString() },
-        { id: uuidv4(), propertyId: properties[1].id, propertyAddress: properties[1].address, tenantId: tenant2.id, tenantName: tenant2.name, tenantEmail: tenant2.email, ownerId: owner.id, managerId: manager.id, title: 'Garage door remote broken', description: 'Remote stopped working. Manual works fine.', priority: 'low', status: 'resolved', createdAt: new Date(Date.now() - 86400000 * 10).toISOString() },
+        mkTicket(btsProps[3], tRandall, 'Garage door not closing', 'Sensor light blinks red — door reverses halfway. Started last night.', 'high', 'open', 1),
+        mkTicket(btsProps[4], tKurt, 'Kitchen faucet leaking', 'Slow drip under the sink — pooling on cabinet floor.', 'medium', 'in_progress', 3),
+        mkTicket(btsProps[1], tMike, 'AC not cooling below 78°F', 'Set to 72°F, thermostat won\'t drop. Filter changed last month.', 'high', 'open', 2),
+        mkTicket(raviProps[1], tSamantha, 'Backyard sprinkler broken', 'Zone 3 sprays only sideways, flooding the deck.', 'low', 'resolved', 8),
       ]
       await db.collection('tickets').insertMany(tickets)
 
-      return ok({ ok: true, seeded: { users: 5, properties: 3, tickets: 3 } })
+      return ok({
+        ok: true,
+        seeded: { users: 13, properties: allProps.length, tickets: tickets.length },
+        credentials: {
+          manager: 'manager@grtr.com',
+          owners: ['btsrinu@gmail.com', 'ravi.nasika@gmail.com', 'owner@grtr.com'],
+          tenants: ['jones099672@yahoo.com', '4tacollier@gmail.com', 'newmillsen@gmail.com', 'kurtb@example.com', 'sgrunyon7@aol.com', 'sjbender13@gmail.com', 'adam@example.com', 'keith@example.com', 'tenant@grtr.com'],
+          password: 'demo123',
+        },
+      })
     }
 
     return err(`Route ${route} not found`, 404)

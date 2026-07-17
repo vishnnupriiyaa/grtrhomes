@@ -48,3 +48,12 @@ body {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     }
 }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-float-slow { animation: float 6s ease-in-out infinite; }
+.animate-float-slower { animation: float 7s ease-in-out infinite 0.5s; }
+

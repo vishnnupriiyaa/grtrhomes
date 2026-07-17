@@ -162,10 +162,17 @@ const LoginPage = () => {
               {seeding ? 'Loading demo data...' : 'Load demo data (one-click)'}
             </Button>
             <p className="text-xs text-muted-foreground mb-2">Then click a role below (password: <span className="font-mono">demo123</span>):</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2 mb-2">
               <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('manager@grtr.com')}>Manager</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('owner@grtr.com')}>Owner</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('tenant@grtr.com')}>Tenant</Button>
+              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('btsrinu@gmail.com')}>Owner: BTS</Button>
+              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('ravi.nasika@gmail.com')}>Owner: Ravi</Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-1">Tenants:</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('jones099672@yahoo.com')}>Mike Jones</Button>
+              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('4tacollier@gmail.com')}>Teresa</Button>
+              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('newmillsen@gmail.com')}>Randall</Button>
+              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('sjbender13@gmail.com')}>Samantha</Button>
             </div>
           </div>
         </div>

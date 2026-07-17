@@ -216,7 +216,7 @@ const TenantView = ({ user, properties, tickets, onRefresh }) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <StatCard icon={Calendar} label="Lease Expires" value={formatDate(p.leaseEnd)} sub={daysUntil(p.leaseEnd) !== null ? `${daysUntil(p.leaseEnd)} days left` : ''} />
             <StatCard icon={DollarSign} label="Next Rent Due" value={formatCurrency(p.monthlyRent)} sub={formatDate(nextRentDay)} accent />
-            <StatCard icon={Shield} label="Home Insurance" value={p.insuranceProvider || '—'} sub={p.insuranceEnd ? `Expires ${formatDate(p.insuranceEnd)}` : ''} />
+            <StatCard icon={Shield} label="Home Insurance" value={p.insuranceProvider || '—'} sub={p.insuranceEnd ? `Expires ${formatDate(p.insuranceEnd)}` : ''} link={p.insurancePortalUrl} />
           </div>
           <div className="bg-card border border-border rounded-2xl overflow-hidden mb-8">
             <PropertyRow property={p} role="tenant" user={user} onRefresh={onRefresh} standalone />
@@ -240,7 +240,7 @@ const TenantView = ({ user, properties, tickets, onRefresh }) => {
 }
 
 /* ---------------- COMPONENTS ---------------- */
-const StatCard = ({ icon: Icon, label, value, sub, accent }) => (
+const StatCard = ({ icon: Icon, label, value, sub, accent, link }) => (
   <div className="bg-card border border-border rounded-2xl p-5">
     <div className="flex items-center justify-between mb-3">
       <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
@@ -248,6 +248,7 @@ const StatCard = ({ icon: Icon, label, value, sub, accent }) => (
     </div>
     <p className={`text-2xl font-bold ${accent ? 'text-primary' : ''}`}>{value}</p>
     {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+    {link && <a href={link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline mt-1 inline-block">Open portal ↗</a>}
   </div>
 )
 
@@ -326,6 +327,13 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
                     <DetailLine label="Loan UID" value={property.loanAccountNumber} />
                     <DetailLine label="ROI" value={property.roi ? `${property.roi}%` : '—'} />
                     <DetailLine label="Monthly EMI" value={formatCurrency(property.monthlyEmi)} />
+                    <DetailLine label="Loan Password" value={property.loanPassword ? '••••••••' : '—'} />
+                    <DetailLine label="Escrow" value={property.escrow ? 'Enabled' : 'Not enabled'} />
+                    {property.insurancePortalUrl && (
+                      <div className="col-span-2">
+                        <a href={property.insurancePortalUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline">Insurance portal ↗</a>
+                      </div>
+                    )}
                   </div>
                   {property.loanPortalUrl && (
                     <a href={property.loanPortalUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline mt-2 inline-block">Open Loan Portal ↗</a>
