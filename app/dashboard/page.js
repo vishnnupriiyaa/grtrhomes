@@ -302,50 +302,52 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
           </div>
 
           {open && (
-            <div className="mt-5 pt-5 border-t border-border grid md:grid-cols-2 gap-6">
-              {(role === 'manager' || role === 'owner') && (
-                <div>
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><User className="h-4 w-4 text-primary" /> Tenant Details</h4>
-                  <DetailLine label="Name" value={property.tenantName} />
-                  <DetailLine label="Email" value={property.tenantEmail} icon={Mail} />
-                  <DetailLine label="Phone" value={property.tenantPhone} icon={Phone} />
-                  <DetailLine label="Security Deposit" value={formatCurrency(property.securityDeposit)} />
-                </div>
-              )}
-              <div>
-                <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><Shield className="h-4 w-4 text-primary" /> Home Insurance</h4>
-                <DetailLine label="Provider" value={property.insuranceProvider} />
-                <DetailLine label="Policy #" value={property.insurancePolicyNumber} />
-                <DetailLine label="Period" value={`${formatDate(property.insuranceStart)} → ${formatDate(property.insuranceEnd)}`} />
-                <DetailLine label="Renewal in" value={daysUntil(property.insuranceEnd) !== null ? `${daysUntil(property.insuranceEnd)} days` : '—'} />
-              </div>
-              {role === 'owner' && (
-                <div className="md:col-span-2">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><Percent className="h-4 w-4 text-primary" /> Financial / Mortgage</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <DetailLine label="Loan Provider" value={property.loanProvider} />
-                    <DetailLine label="Loan UID" value={property.loanAccountNumber} />
-                    <DetailLine label="ROI" value={property.roi ? `${property.roi}%` : '—'} />
-                    <DetailLine label="Monthly EMI" value={formatCurrency(property.monthlyEmi)} />
-                    <DetailLine label="Loan Password" value={property.loanPassword ? '••••••••' : '—'} />
-                    <DetailLine label="Escrow" value={property.escrow ? 'Enabled' : 'Not enabled'} />
-                    {property.insurancePortalUrl && (
-                      <div className="col-span-2">
-                        <a href={property.insurancePortalUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline">Insurance portal ↗</a>
-                      </div>
-                    )}
-                  </div>
-                  {property.loanPortalUrl && (
-                    <a href={property.loanPortalUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline mt-2 inline-block">Open Loan Portal ↗</a>
+            <div className="mt-6 pt-6 border-t border-border">
+              <div className="grid md:grid-cols-2 gap-4">
+                {(role === 'manager' || role === 'owner') && (
+                  <DetailCard icon={User} title="Tenant Details" accent="emerald">
+                    <Row label="Full name" value={property.tenantName || 'Vacant'} />
+                    <Row label="Email" value={property.tenantEmail} />
+                    <Row label="Phone" value={property.tenantPhone} />
+                    <Row label="Security Deposit" value={formatCurrency(property.securityDeposit)} />
+                    <Row label="Lease Type" value={property.leaseType || 'Standard'} />
+                  </DetailCard>
+                )}
+
+                <DetailCard icon={Shield} title="Home Insurance" accent="blue">
+                  <Row label="Provider" value={property.insuranceProvider} />
+                  <Row label="Policy #" value={property.insurancePolicyNumber} />
+                  <Row label="Start" value={formatDate(property.insuranceStart)} />
+                  <Row label="End" value={formatDate(property.insuranceEnd)} />
+                  <Row label="Renewal in" value={daysUntil(property.insuranceEnd) !== null ? `${daysUntil(property.insuranceEnd)} days` : '—'} highlight={daysUntil(property.insuranceEnd) !== null && daysUntil(property.insuranceEnd) < 60} />
+                  {property.insuranceRenewalAmount && <Row label="Renewal amount" value={formatCurrency(property.insuranceRenewalAmount)} />}
+                  {property.insurancePortalUrl && (
+                    <a href={property.insurancePortalUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Open insurance portal <span aria-hidden>↗</span></a>
                   )}
-                </div>
-              )}
-              {role === 'manager' && (
-                <div className="md:col-span-2">
-                  <h4 className="font-semibold text-sm mb-3">Owner</h4>
-                  <DetailLine label="Name" value={property.ownerName} />
-                </div>
-              )}
+                </DetailCard>
+
+                {role === 'owner' && (
+                  <DetailCard icon={Percent} title="Financial / Mortgage" accent="amber" fullWidth>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+                      <Row label="Loan provider" value={property.loanProvider} />
+                      <Row label="Loan UID" value={property.loanAccountNumber} />
+                      <Row label="Loan password" value={property.loanPassword ? '••••••••' : '—'} />
+                      <Row label="ROI" value={property.roi ? `${property.roi}%` : '—'} />
+                      <Row label="Monthly EMI" value={formatCurrency(property.monthlyEmi)} strong />
+                      <Row label="Escrow" value={property.escrow ? 'Enabled' : 'Not enabled'} badge={property.escrow ? 'emerald' : 'slate'} />
+                    </div>
+                    {property.loanPortalUrl && (
+                      <a href={property.loanPortalUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Open loan portal <span aria-hidden>↗</span></a>
+                    )}
+                  </DetailCard>
+                )}
+
+                {role === 'manager' && (
+                  <DetailCard icon={User} title="Owner" accent="amber">
+                    <Row label="Name" value={property.ownerName} />
+                  </DetailCard>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -363,10 +365,31 @@ const MiniField = ({ icon: Icon, label, value }) => (
   </div>
 )
 
-const DetailLine = ({ label, value, icon: Icon }) => (
-  <div className="flex items-start justify-between py-1.5 text-sm gap-4">
-    <span className="text-muted-foreground flex items-center gap-1.5">{Icon && <Icon className="h-3 w-3" />}{label}</span>
-    <span className="font-medium text-right">{value || '—'}</span>
+const ACCENT_MAP = {
+  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60',
+  blue: 'bg-sky-50 text-sky-700 ring-sky-200/60',
+  amber: 'bg-amber-50 text-amber-800 ring-amber-200/60',
+  slate: 'bg-slate-100 text-slate-700 ring-slate-200/60',
+}
+const DetailCard = ({ icon: Icon, title, accent = 'emerald', fullWidth, children }) => (
+  <div className={`bg-muted/30 border border-border rounded-2xl p-5 ${fullWidth ? 'md:col-span-2' : ''}`}>
+    <div className="flex items-center gap-2 mb-4">
+      <div className={`h-8 w-8 rounded-lg ring-1 flex items-center justify-center ${ACCENT_MAP[accent]}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <h4 className="font-semibold text-sm">{title}</h4>
+    </div>
+    {children}
+  </div>
+)
+const Row = ({ label, value, strong, highlight, badge }) => (
+  <div className="flex items-baseline justify-between gap-4 py-1.5 border-b border-border/40 last:border-0">
+    <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+    {badge ? (
+      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ACCENT_MAP[badge]}`}>{value || '—'}</span>
+    ) : (
+      <span className={`text-sm text-right break-words ${strong ? 'font-bold text-foreground' : 'font-medium'} ${highlight ? 'text-amber-700' : ''}`}>{value || '—'}</span>
+    )}
   </div>
 )
 

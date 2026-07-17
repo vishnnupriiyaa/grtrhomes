@@ -18,7 +18,7 @@ const Nav = () => (
         <a href="#roles" className="text-sm text-muted-foreground hover:text-foreground hidden md:inline">Who it's for</a>
         <a href="#tech" className="text-sm text-muted-foreground hover:text-foreground hidden md:inline">Tech</a>
         <Link href="/login">
-          <Button className="rounded-full px-5">Access Portal</Button>
+          <Button className="rounded-full px-5">Login / Sign up</Button>
         </Link>
       </div>
     </div>
@@ -48,7 +48,7 @@ const Hero = () => (
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/login">
             <Button size="lg" className="rounded-full px-6 gap-2">
-              Access Your Portal <ArrowRight className="h-4 w-4" />
+              Login / Sign up <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
           <a href="#features">
