@@ -18,6 +18,11 @@ const LoginPage = () => {
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [regForm, setRegForm] = useState({ name: '', email: '', password: '', phone: '', role: 'tenant' })
+  const [recoveryMode, setRecoveryMode] = useState('none')
+  const [recoveryEmail, setRecoveryEmail] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -59,6 +64,47 @@ const LoginPage = () => {
     }
   }
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault()
+    setRecoveryLoading(true)
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoveryEmail }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to process password reset')
+      toast.success(data.message || 'If an account exists, reset instructions are ready.')
+      setRecoveryEmail('')
+      setRecoveryMode('none')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    setRecoveryLoading(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoveryEmail, currentPassword, newPassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to change password')
+      toast.success(data.message || 'Password updated successfully')
+      setRecoveryEmail('')
+      setCurrentPassword('')
+      setNewPassword('')
+      setRecoveryMode('none')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -96,6 +142,46 @@ const LoginPage = () => {
                     <Label>Password</Label>
                     <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
                   </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <button type="button" onClick={() => { setRecoveryMode('forgot'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Forgot password?</button>
+                    <button type="button" onClick={() => { setRecoveryMode('change'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Change password</button>
+                  </div>
+                  {recoveryMode !== 'none' && (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                      <p className="text-sm font-medium">{recoveryMode === 'forgot' ? 'Reset your password' : 'Update your password'}</p>
+                      {recoveryMode === 'forgot' ? (
+                        <form onSubmit={handleForgotPassword} className="space-y-3">
+                          <div>
+                            <Label>Email</Label>
+                            <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
+                            <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Working...' : 'Send reset'}</Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <form onSubmit={handleChangePassword} className="space-y-3">
+                          <div>
+                            <Label>Email</Label>
+                            <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
+                          </div>
+                          <div>
+                            <Label>Current password</Label>
+                            <Input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                          </div>
+                          <div>
+                            <Label>New password</Label>
+                            <Input type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
+                            <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Updating...' : 'Change password'}</Button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
                   <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : 'Sign in'}</Button>
                 </form>
               </TabsContent>

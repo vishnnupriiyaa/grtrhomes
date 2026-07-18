@@ -66,6 +66,26 @@ async function handleRoute(request, { params }) {
       return ok({ user: clean(user) })
     }
 
+    if (route === '/auth/forgot-password' && method === 'POST') {
+      const b = await request.json()
+      if (!b.email) return err('email required')
+      const user = await db.collection('users').findOne({ email: b.email })
+      if (user) {
+        await db.collection('users').updateOne({ id: user.id }, { $set: { passwordResetRequestedAt: new Date().toISOString() } })
+      }
+      return ok({ message: 'If an account exists, reset instructions have been prepared.' })
+    }
+
+    if (route === '/auth/change-password' && method === 'POST') {
+      const b = await request.json()
+      if (!b.email || !b.currentPassword || !b.newPassword) return err('email, currentPassword, newPassword required')
+      if (b.newPassword.length < 6) return err('Password must be at least 6 characters')
+      const user = await db.collection('users').findOne({ email: b.email })
+      if (!user || user.password !== b.currentPassword) return err('Current password is incorrect', 401)
+      await db.collection('users').updateOne({ id: user.id }, { $set: { password: b.newPassword, updatedAt: new Date().toISOString() } })
+      return ok({ message: 'Password updated successfully' })
+    }
+
     if (route === '/users' && method === 'GET') {
       const users = await db.collection('users').find({}).toArray()
       return ok(users.map(clean))
@@ -128,15 +148,17 @@ async function handleRoute(request, { params }) {
     if (route === '/tickets' && method === 'POST') {
       const b = await request.json()
       const property = await db.collection('properties').findOne({ id: b.propertyId })
+      const ownerEmail = b.ownerEmail || property?.ownerEmail || ''
+      const managerEmail = b.managerEmail || property?.managerEmail || ''
       const t = {
         id: uuidv4(), ...b, status: 'open',
         propertyAddress: property?.address,
-        ownerId: property?.ownerId, ownerEmail: property?.ownerEmail,
-        managerId: property?.managerId,
+        ownerId: property?.ownerId, ownerEmail,
+        managerId: property?.managerId, managerEmail,
         createdAt: new Date().toISOString(),
         notifications: [
-          { to: property?.ownerName || 'Owner', method: 'email', at: new Date().toISOString() },
-          { to: property?.managerName || 'Manager', method: 'email', at: new Date().toISOString() },
+          { to: ownerEmail || property?.ownerName || 'Owner', method: 'email', at: new Date().toISOString() },
+          { to: managerEmail || property?.managerName || 'Manager', method: 'email', at: new Date().toISOString() },
         ],
       }
       await db.collection('tickets').insertOne(t)

@@ -554,6 +554,7 @@ const F = ({ label, children, required, full }) => (
 const TicketDialog = ({ children, user, property, onSaved }) => {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium' })
+  const [recipientEmails, setRecipientEmails] = useState({ ownerEmail: '', managerEmail: '' })
   const [saving, setSaving] = useState(false)
   const submit = async (e) => {
     e.preventDefault()
@@ -564,11 +565,13 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
         body: JSON.stringify({
           ...form, propertyId: property.id,
           tenantId: user.id, tenantName: user.name, tenantEmail: user.email,
+          ownerEmail: recipientEmails.ownerEmail,
+          managerEmail: recipientEmails.managerEmail,
         }),
       })
       if (!res.ok) throw new Error('Failed')
-      toast.success('Ticket submitted — owner & manager notified')
-      setOpen(false); setForm({ title: '', description: '', priority: 'medium' }); onSaved()
+      toast.success('Ticket submitted — owner and manager notified by email')
+      setOpen(false); setForm({ title: '', description: '', priority: 'medium' }); setRecipientEmails({ ownerEmail: '', managerEmail: '' }); onSaved()
     } catch (err) { toast.error(err.message) }
     finally { setSaving(false) }
   }
@@ -580,6 +583,8 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
         <form onSubmit={submit} className="space-y-4">
           <div><Label>Title</Label><Input required className="mt-1" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Leaking kitchen sink" /></div>
           <div><Label>Description</Label><Textarea required rows={4} className="mt-1" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+          <div><Label>Owner email</Label><Input type="email" required className="mt-1" value={recipientEmails.ownerEmail} onChange={e => setRecipientEmails({ ...recipientEmails, ownerEmail: e.target.value })} placeholder="owner@example.com" /></div>
+          <div><Label>Manager email</Label><Input type="email" required className="mt-1" value={recipientEmails.managerEmail} onChange={e => setRecipientEmails({ ...recipientEmails, managerEmail: e.target.value })} placeholder="manager@example.com" /></div>
           <div><Label>Priority</Label>
             <Select value={form.priority} onValueChange={v => setForm({ ...form, priority: v })}>
               <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
