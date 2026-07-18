@@ -6,8 +6,13 @@ let client
 let db
 
 async function connectToMongo() {
+  const mongoUrl = process.env.MONGO_URL || process.env.MONGODB_URI || process.env.GRTRHOMES_MONGODB_URI || process.env.grtrhomes_MONGODB_URI
+  if (!mongoUrl) {
+    throw new Error('Missing MongoDB connection string. Set MONGO_URL, MONGODB_URI, or GRTRHOMES_MONGODB_URI.')
+  }
+
   if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
+    client = new MongoClient(mongoUrl)
     await client.connect()
     db = client.db(process.env.DB_NAME || 'grtr_homes')
   }

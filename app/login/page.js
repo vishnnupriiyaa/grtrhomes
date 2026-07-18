@@ -8,14 +8,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Home, ArrowLeft, Sparkles } from 'lucide-react'
+import { Home, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
 const LoginPage = () => {
   const router = useRouter()
   const [tab, setTab] = useState('login')
   const [loading, setLoading] = useState(false)
-  const [seeding, setSeeding] = useState(false)
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [regForm, setRegForm] = useState({ name: '', email: '', password: '', phone: '', role: 'tenant' })
@@ -60,24 +59,6 @@ const LoginPage = () => {
     }
   }
 
-  const handleSeed = async () => {
-    setSeeding(true)
-    try {
-      const res = await fetch('/api/seed', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Seed failed')
-      toast.success('Demo data loaded! Try any account below.')
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setSeeding(false)
-    }
-  }
-
-  const quickLogin = (email) => {
-    setLoginForm({ email, password: 'demo123' })
-    setTab('login')
-  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -153,28 +134,6 @@ const LoginPage = () => {
             </Tabs>
           </div>
 
-          <div className="mt-6 bg-primary/5 border border-primary/20 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <p className="font-semibold text-sm">Try the demo</p>
-            </div>
-            <Button onClick={handleSeed} disabled={seeding} variant="outline" size="sm" className="w-full mb-3 bg-background">
-              {seeding ? 'Loading demo data...' : 'Load demo data (one-click)'}
-            </Button>
-            <p className="text-xs text-muted-foreground mb-2">Then click a role below (password: <span className="font-mono">demo123</span>):</p>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('manager@grtr.com')}>Manager</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('btsrinu@gmail.com')}>Owner: BTS</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('ravi.nasika@gmail.com')}>Owner: Ravi</Button>
-            </div>
-            <p className="text-[10px] text-muted-foreground mb-1">Tenants:</p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('jones099672@yahoo.com')}>Mike Jones</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('4tacollier@gmail.com')}>Teresa</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('newmillsen@gmail.com')}>Randall</Button>
-              <Button variant="outline" size="sm" className="bg-background text-xs" onClick={() => quickLogin('sjbender13@gmail.com')}>Samantha</Button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
