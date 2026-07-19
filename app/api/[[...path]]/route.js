@@ -1,46 +1,7 @@
-import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
-import { buildUserRegistrationDocument, getAccountDeletionTargets, isValidEmail, normalizeEmail } from '@/lib/onboarding.mjs'
-
-let client
-let clientPromise
-
-async function createMongoClient(mongoUrl) {
-  const nextClient = new MongoClient(mongoUrl, {
-    maxPoolSize: 10,
-    minPoolSize: 0,
-    retryWrites: true,
-    serverSelectionTimeoutMS: 10000,
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
-  })
-  await nextClient.connect()
-  return nextClient
-}
-
-async function connectToMongo() {
-  const mongoUrl = process.env.MONGO_URL || process.env.MONGODB_URI || process.env.GRTRHOMES_MONGODB_URI || process.env.grtrhomes_MONGODB_URI
-  if (!mongoUrl) {
-    throw new Error('Missing MongoDB connection string. Set MONGO_URL, MONGODB_URI, or GRTRHOMES_MONGODB_URI.')
-  }
-  const dbName = process.env.DB_NAME || 'grtr_homes'
-
-  if (!clientPromise) {
-    clientPromise = createMongoClient(mongoUrl)
-  }
-
-  try {
-    client = await clientPromise
-    await client.db(dbName).command({ ping: 1 })
-  } catch (error) {
-    console.warn('MongoDB reconnect triggered:', error?.message)
-    clientPromise = createMongoClient(mongoUrl)
-    client = await clientPromise
-  }
-
-  return client.db(dbName)
-}
+import { connectToMongo } from '@/lib/mongo'
+import { buildUserRegistrationDocument, getAccountDeletionTargets, isGoogleMailAccount, isValidEmail, normalizeEmail } from '@/lib/onboarding.mjs'
 
 function handleCORS(response) {
   response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
@@ -72,11 +33,14 @@ async function handleRoute(request, { params }) {
     if (route === '/auth/register' && method === 'POST') {
       const b = await request.json()
       const normalizedEmail = normalizeEmail(b.email)
-      if (!normalizedEmail || !b.password || !b.name || !b.role) return err('email, password, name, role required')
+      const authMethod = b.authMethod === 'google' ? 'google' : 'email-password'
+      if (!normalizedEmail || !b.name || !b.role) return err('email, name, role required')
+      if (authMethod === 'email-password' && !b.password) return err('password required')
       if (!isValidEmail(normalizedEmail)) return err('Please use a real email address')
+      if (authMethod === 'google' && !isGoogleMailAccount(normalizedEmail)) return err('Continue with Google requires a Gmail account')
       const existing = await db.collection('users').findOne({ email: normalizedEmail })
       if (existing) return err('Email already registered')
-      const user = buildUserRegistrationDocument({ ...b, email: normalizedEmail }, uuidv4())
+      const user = buildUserRegistrationDocument({ ...b, email: normalizedEmail, authMethod }, uuidv4())
       await db.collection('users').insertOne(user)
       if ((b.role === 'owner' || b.role === 'manager') && Array.isArray(b.profile?.properties)) {
         const propertyDocs = b.profile.properties
@@ -108,7 +72,15 @@ async function handleRoute(request, { params }) {
     if (route === '/auth/login' && method === 'POST') {
       const b = await request.json()
       const normalizedEmail = normalizeEmail(b.email)
+      const authMethod = b.authMethod === 'google' ? 'google' : 'email-password'
       if (!isValidEmail(normalizedEmail)) return err('Please use a real email address', 401)
+      if (authMethod === 'google') {
+        if (!isGoogleMailAccount(normalizedEmail)) return err('Continue with Google requires a Gmail account', 401)
+        const user = await db.collection('users').findOne({ email: normalizedEmail })
+        if (!user) return err('No account found for this Google email', 404)
+        if (user.authMethod && user.authMethod !== 'google') return err('This account uses email and password sign-in', 401)
+        return ok({ user: clean({ ...user, authMethod: 'google' }) })
+      }
       const user = await db.collection('users').findOne({ email: normalizedEmail, password: b.password })
       if (!user) return err('Invalid email or password', 401)
       return ok({ user: clean(user) })

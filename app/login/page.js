@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { signIn } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,8 +28,37 @@ const LoginPage = () => {
   const [newPassword, setNewPassword] = useState('')
   const [recoveryLoading, setRecoveryLoading] = useState(false)
 
+  useEffect(() => {
+    const error = new URLSearchParams(window.location.search).get('error')
+    if (!error) return
+
+    const messages = {
+      'google-account-not-allowed': 'Continue with Google only works with verified Gmail accounts.',
+      'google-account-not-registered': 'No portal account exists for this Google account. Register first, then try Google sign-in again.',
+      AccessDenied: 'Google sign-in was denied. Use a verified Gmail account linked to your portal access.',
+      OAuthAccountNotLinked: 'This Google account is not linked for sign-in here.',
+      Configuration: 'Google sign-in is not configured yet. Add the Google OAuth environment variables.',
+    }
+
+    toast.error(messages[error] || 'Google sign-in failed. Please try again.')
+  }, [])
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true)
+    try {
+      await signIn('google', { callbackUrl: '/dashboard' })
+    } catch (err) {
+      toast.error(err.message || 'Unable to start Google sign-in')
+      setLoading(false)
+    }
+  }
+
   const handleLogin = async (e) => {
     e.preventDefault()
+    if (loginForm.authMethod === 'google') {
+      await handleGoogleSignIn()
+      return
+    }
     const normalizedEmail = normalizeEmail(loginForm.email)
     if (!isValidEmail(normalizedEmail)) {
       toast.error('Please use a real email address to sign in.')
@@ -66,7 +96,7 @@ const LoginPage = () => {
         ...regForm,
         email: normalizedEmail,
         profile: profileForm,
-        authMethod: loginForm.authMethod === 'google' ? 'google' : 'email-password',
+        authMethod: 'email-password',
       }
       const res = await fetch('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -190,10 +220,6 @@ const LoginPage = () => {
               <TabsContent value="login" className="mt-6">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
-                    <Label>Email</Label>
-                    <Input type="email" required value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className="mt-1.5" placeholder="you@gmail.com" />
-                  </div>
-                  <div>
                     <Label>Sign in with</Label>
                     <Select value={loginForm.authMethod} onValueChange={(value) => setLoginForm({ ...loginForm, authMethod: value })}>
                       <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
@@ -203,53 +229,64 @@ const LoginPage = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  {loginForm.authMethod === 'email-password' && (
-                    <div>
-                      <Label>Password</Label>
-                      <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <button type="button" onClick={() => { setRecoveryMode('forgot'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Forgot password?</button>
-                    <button type="button" onClick={() => { setRecoveryMode('change'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Change password</button>
-                  </div>
-                  {recoveryMode !== 'none' && (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
-                      <p className="text-sm font-medium">{recoveryMode === 'forgot' ? 'Reset your password' : 'Update your password'}</p>
-                      {recoveryMode === 'forgot' ? (
-                        <form onSubmit={handleForgotPassword} className="space-y-3">
-                          <div>
-                            <Label>Email</Label>
-                            <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
-                            <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Working...' : 'Send reset'}</Button>
-                          </div>
-                        </form>
-                      ) : (
-                        <form onSubmit={handleChangePassword} className="space-y-3">
-                          <div>
-                            <Label>Email</Label>
-                            <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
-                          </div>
-                          <div>
-                            <Label>Current password</Label>
-                            <Input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
-                          </div>
-                          <div>
-                            <Label>New password</Label>
-                            <Input type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
-                            <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Updating...' : 'Change password'}</Button>
-                          </div>
-                        </form>
+                  {loginForm.authMethod === 'email-password' ? (
+                    <>
+                      <div>
+                        <Label>Email</Label>
+                        <Input type="email" required value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className="mt-1.5" placeholder="you@example.com" />
+                      </div>
+                      <div>
+                        <Label>Password</Label>
+                        <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
+                      </div>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <button type="button" onClick={() => { setRecoveryMode('forgot'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Forgot password?</button>
+                        <button type="button" onClick={() => { setRecoveryMode('change'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Change password</button>
+                      </div>
+                      {recoveryMode !== 'none' && (
+                        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                          <p className="text-sm font-medium">{recoveryMode === 'forgot' ? 'Reset your password' : 'Update your password'}</p>
+                          {recoveryMode === 'forgot' ? (
+                            <form onSubmit={handleForgotPassword} className="space-y-3">
+                              <div>
+                                <Label>Email</Label>
+                                <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
+                                <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Working...' : 'Send reset'}</Button>
+                              </div>
+                            </form>
+                          ) : (
+                            <form onSubmit={handleChangePassword} className="space-y-3">
+                              <div>
+                                <Label>Email</Label>
+                                <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
+                              </div>
+                              <div>
+                                <Label>Current password</Label>
+                                <Input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                              </div>
+                              <div>
+                                <Label>New password</Label>
+                                <Input type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
+                                <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Updating...' : 'Change password'}</Button>
+                              </div>
+                            </form>
+                          )}
+                        </div>
                       )}
+                      <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : 'Sign in'}</Button>
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-4">
+                      <p className="text-sm text-muted-foreground">Use your verified Gmail account to continue. If that Gmail address is already registered for a portal account, you will be signed in automatically.</p>
+                      <Button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full rounded-full">{loading ? 'Redirecting...' : 'Continue with Google'}</Button>
                     </div>
                   )}
-                  <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : loginForm.authMethod === 'google' ? 'Continue with Google' : 'Sign in'}</Button>
                 </form>
               </TabsContent>
               <TabsContent value="register" className="mt-6">

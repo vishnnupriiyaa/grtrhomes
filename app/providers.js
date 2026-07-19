@@ -2,6 +2,7 @@
 
 // Client-only context wrapper. QueryClient is created once at module load.
 
+import { SessionProvider } from 'next-auth/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient({
@@ -14,5 +15,9 @@ const queryClient = new QueryClient({
 });
 
 export function Providers({ children }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <SessionProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </SessionProvider>
+  );
 }

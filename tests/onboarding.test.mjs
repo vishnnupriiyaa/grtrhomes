@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getRoleProfileFields, createPropertyDraft, buildUserRegistrationDocument, getAccountDeletionTargets, isValidEmail, normalizeEmail } from '../lib/onboarding.mjs'
+import { getRoleProfileFields, createPropertyDraft, buildUserRegistrationDocument, getAccountDeletionTargets, isGoogleMailAccount, isValidEmail, normalizeEmail } from '../lib/onboarding.mjs'
 
 test('owner onboarding includes property setup fields', () => {
   const profile = getRoleProfileFields('owner')
@@ -39,7 +39,22 @@ test('email validation accepts real addresses and rejects fake ones', () => {
   assert.equal(isValidEmail('owner@outlook.com'), true)
   assert.equal(isValidEmail('fake@tempmail.com'), false)
   assert.equal(isValidEmail('mock-user@example.com'), false)
+  assert.equal(isGoogleMailAccount('user@gmail.com'), true)
+  assert.equal(isGoogleMailAccount('user@googlemail.com'), true)
+  assert.equal(isGoogleMailAccount('owner@outlook.com'), false)
   assert.equal(normalizeEmail(' User@Gmail.COM '), 'user@gmail.com')
+})
+
+test('google registration stores google auth without a password', () => {
+  const doc = buildUserRegistrationDocument({
+    name: 'Ava',
+    email: 'ava@gmail.com',
+    password: 'secret123',
+    role: 'owner',
+    authMethod: 'google',
+  }, 'user-456')
+  assert.equal(doc.authMethod, 'google')
+  assert.equal(doc.password, '')
 })
 
 test('account deletion targets include the signed-in user and related records', () => {

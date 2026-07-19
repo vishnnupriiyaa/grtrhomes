@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { signOut, useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,6 +36,7 @@ const daysUntil = (d) => {
 
 const DashboardPage = () => {
   const router = useRouter()
+  const { data: session, status } = useSession()
   const [user, setUser] = useState(null)
   const [properties, setProperties] = useState([])
   const [tickets, setTickets] = useState([])
@@ -43,11 +45,38 @@ const DashboardPage = () => {
 
   useEffect(() => {
     const stored = localStorage.getItem('grtr_user')
-    if (!stored) { router.push('/login'); return }
-    const u = JSON.parse(stored)
-    setUser(u)
-    refresh(u)
-  }, [router])
+    if (stored) {
+      const nextUser = JSON.parse(stored)
+      setUser(nextUser)
+      refresh(nextUser)
+      return
+    }
+
+    if (status === 'loading') return
+
+    if (session?.user?.provider === 'google') {
+      hydrateGoogleUser()
+      return
+    }
+
+    router.push('/login')
+  }, [router, session, status])
+
+  const hydrateGoogleUser = async () => {
+    try {
+      const res = await fetch('/api/auth/oauth-user')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to complete Google sign-in')
+      localStorage.setItem('grtr_user', JSON.stringify(data.user))
+      setUser(data.user)
+      toast.success(`Welcome back, ${data.user.name}!`)
+      refresh(data.user)
+    } catch (err) {
+      localStorage.removeItem('grtr_user')
+      toast.error(err.message)
+      await signOut({ callbackUrl: '/login?error=google-account-not-registered' })
+    }
+  }
 
   const refresh = async (u = user) => {
     if (!u) return
@@ -68,8 +97,9 @@ const DashboardPage = () => {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
     localStorage.removeItem('grtr_user')
+    await signOut({ redirect: false })
     router.push('/')
   }
 
@@ -85,6 +115,7 @@ const DashboardPage = () => {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Unable to delete account')
       localStorage.removeItem('grtr_user')
+      await signOut({ redirect: false })
       toast.success('Account deleted successfully')
       router.push('/login')
     } catch (err) {
