@@ -6,19 +6,19 @@ import { Home, Shield, Building2, CreditCard, Wrench, Mail, TrendingUp, FileText
 
 const Nav = () => (
   <nav className="w-full border-b border-border/60 bg-background/80 backdrop-blur sticky top-0 z-40">
-    <div className="container mx-auto flex items-center justify-between h-16 px-4">
+    <div className="container mx-auto flex items-center justify-between h-14 md:h-16 px-4">
       <Link href="/" className="flex items-center gap-2">
-        <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-          <Home className="h-5 w-5 text-primary-foreground" />
+        <div className="h-8 w-8 md:h-9 md:w-9 rounded-lg bg-primary flex items-center justify-center">
+          <Home className="h-4 w-4 md:h-5 md:w-5 text-primary-foreground" />
         </div>
-        <span className="font-bold text-lg tracking-tight">GRTR Homes</span>
+        <span className="font-bold text-base md:text-lg tracking-tight">GRTR Homes</span>
       </Link>
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-2 md:gap-6">
         <a href="#features" className="text-sm text-muted-foreground hover:text-foreground hidden md:inline">Features</a>
         <a href="#roles" className="text-sm text-muted-foreground hover:text-foreground hidden md:inline">Who it's for</a>
         <a href="#tech" className="text-sm text-muted-foreground hover:text-foreground hidden md:inline">Tech</a>
         <Link href="/login">
-          <Button className="rounded-full px-5">Login / Sign up</Button>
+          <Button className="rounded-full px-3 py-2 text-xs sm:text-sm sm:px-5">Login / Sign up</Button>
         </Link>
       </div>
     </div>
@@ -32,27 +32,27 @@ const Hero = () => (
       <div className="absolute top-20 -left-20 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
       <div className="absolute bottom-0 right-1/4 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
     </div>
-    <div className="container mx-auto px-4 py-14 md:py-28 grid md:grid-cols-2 gap-10 md:gap-12 items-center">
+    <div className="container mx-auto px-4 py-10 md:py-28 grid md:grid-cols-2 gap-8 md:gap-12 items-center">
       <div>
         <div className="inline-flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1 mb-5 md:mb-6 text-xs">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-muted-foreground">Trusted by landlords </span>
         </div>
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
+        <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
           Premium Property <span className="text-primary">Management,</span>
           <br className="hidden sm:block" />Simplified.
         </h1>
         <p className="mt-5 md:mt-6 text-base md:text-lg text-muted-foreground max-w-xl">
           A trusted platform for landlords and tenants across Central Texas. Manage leases, track rent, and resolve maintenance — all in one place.
         </p>
-        <div className="mt-6 md:mt-8 flex flex-wrap gap-3">
+        <div className="mt-6 md:mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
           <Link href="/login">
-            <Button size="lg" className="rounded-full px-6 gap-2">
+            <Button size="lg" className="w-full sm:w-auto rounded-full px-6 gap-2">
               Login / Sign up <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
           <a href="#features">
-            <Button size="lg" variant="outline" className="rounded-full px-6 bg-background">
+            <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-full px-6 bg-background">
               Explore Features
             </Button>
           </a>
@@ -108,25 +108,25 @@ const HeroVisual = () => (
 )
 
 const PortfolioCard = () => (
-  <div className="bg-card border border-border rounded-2xl p-8 shadow-sm max-w-md ml-auto w-full">
+  <div className="bg-card border border-border rounded-2xl p-5 sm:p-8 shadow-sm max-w-md ml-auto w-full">
     <div className="flex items-center justify-between mb-6">
       <div className="h-11 w-11 rounded-lg bg-muted flex items-center justify-center">
         <Shield className="h-5 w-5 text-primary" />
       </div>
       <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-medium">Secure</span>
     </div>
-    <h3 className="font-bold text-lg mb-6"> Overview</h3>
+    <h3 className="font-bold text-lg mb-6">Overview</h3>
     <div className="space-y-4">
       <div>
         <p className="text-xs text-muted-foreground">Manage your properties:</p>
-        <p className="text-2xl font-bold mt-1"> As a property manager</p>
-        <p className="text-2xl text-muted-foreground">As an owner</p>
-        <p className="text-2xl font-bold text-primary mt-1"> As a tenant</p>
+        <p className="text-lg sm:text-2xl font-bold mt-1">As a property manager</p>
+        <p className="text-lg sm:text-2xl text-muted-foreground">As an owner</p>
+        <p className="text-lg sm:text-2xl font-bold text-primary mt-1">As a tenant</p>
       </div>
       <div className="h-px bg-border" />
       <div>
         <p className="text-xs text-muted-foreground">Active Agreements</p>
-        <p className="text-2xl font-bold mt-1">Active Leases</p>
+        <p className="text-lg sm:text-2xl font-bold mt-1">Active Leases</p>
       </div>
     </div>
   </div>
@@ -139,7 +139,7 @@ const Features = () => {
     { icon: Wrench, title: 'Maintenance Portal', desc: 'Tenants submit priority-based tickets while landlords review, assign, and resolve in real-time.' },
   ]
   return (
-    <section id="features" className="py-20 border-t border-border/60">
+    <section id="features" className="py-14 md:py-20 border-t border-border/60">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-2xl mx-auto mb-14">
           <h2 className="text-3xl md:text-4xl font-bold">Everything You Need</h2>
@@ -167,7 +167,7 @@ const Roles = () => {
     { icon: Home, title: 'Active Tenants', desc: 'Personal tenant profiling with lease visibility, insurance details, and support tickets routed straight to landlords and managers.' },
   ]
   return (
-    <section id="roles" className="py-20 border-t border-border/60 bg-muted/30">
+    <section id="roles" className="py-14 md:py-20 border-t border-border/60 bg-muted/30">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-2xl mx-auto mb-14">
           <p className="text-sm font-semibold text-primary uppercase tracking-wide">Three Role-Based Interfaces</p>
@@ -175,7 +175,7 @@ const Roles = () => {
         </div>
         <div className="grid md:grid-cols-3 gap-6">
           {roles.map((r) => (
-            <div key={r.title} className="bg-card border border-border rounded-2xl p-8">
+            <div key={r.title} className="bg-card border border-border rounded-2xl p-6 md:p-8">
               <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
                 <r.icon className="h-6 w-6 text-primary" />
               </div>
@@ -196,8 +196,8 @@ const TechStack = () => {
     { icon: CheckCircle2, title: 'Asset Media Storage', desc: 'Fast image streaming pipelines so landlords can update property photos instantly.' },
   ]
   return (
-    <section id="tech" className="py-20 border-t border-border/60">
-      <div className="container mx-auto px-4 grid md:grid-cols-2 gap-16 items-center">
+    <section id="tech" className="py-14 md:py-20 border-t border-border/60">
+      <div className="container mx-auto px-4 grid md:grid-cols-2 gap-10 md:gap-16 items-center">
         <div>
           <p className="text-sm font-semibold text-primary uppercase tracking-wide">System & Architecture</p>
           <h2 className="text-3xl md:text-4xl font-bold mt-3">Core technical features</h2>
@@ -208,7 +208,7 @@ const TechStack = () => {
         </div>
         <div className="space-y-4">
           {items.map((it) => (
-            <div key={it.title} className="bg-card border border-border rounded-2xl p-6 flex gap-4">
+            <div key={it.title} className="bg-card border border-border rounded-2xl p-5 md:p-6 flex gap-4">
               <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
                 <it.icon className="h-5 w-5 text-primary" />
               </div>
@@ -226,7 +226,7 @@ const TechStack = () => {
 
 const Footer = () => (
   <footer className="border-t border-border/60 py-10">
-    <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div className="container mx-auto px-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
       <div className="flex items-center gap-2">
         <div className="h-7 w-7 rounded-md bg-primary flex items-center justify-center">
           <Home className="h-4 w-4 text-primary-foreground" />
