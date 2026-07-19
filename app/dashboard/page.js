@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Home, LogOut, Plus, Edit, Trash2, MapPin, Calendar, Shield, DollarSign, Percent, User, Phone, Mail, Building2, Wrench, AlertCircle, CheckCircle2, Clock, FileText } from 'lucide-react'
+import { Home, LogOut, Plus, Edit, Trash2, MapPin, Calendar, Shield, DollarSign, Percent, User, Phone, Mail, Building2, Wrench, AlertCircle, CheckCircle2, Clock, FileText, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 const STATUS_COLORS = {
@@ -73,6 +73,25 @@ const DashboardPage = () => {
     router.push('/')
   }
 
+  const deleteAccount = async () => {
+    const confirmed = window.confirm('This will permanently delete your account and related records. Continue?')
+    if (!confirmed) return
+    try {
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, email: user.email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to delete account')
+      localStorage.removeItem('grtr_user')
+      toast.success('Account deleted successfully')
+      router.push('/login')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   if (!user) return null
 
   return (
@@ -94,6 +113,7 @@ const DashboardPage = () => {
               {user.name?.charAt(0)?.toUpperCase()}
             </div>
             <Button variant="ghost" size="sm" onClick={logout} className="h-9 w-9 p-0 md:h-9 md:w-auto md:px-3"><LogOut className="h-4 w-4" /></Button>
+            <Button variant="destructive" size="sm" onClick={deleteAccount} className="h-9 px-3">Delete account</Button>
           </div>
         </div>
       </nav>
@@ -171,10 +191,15 @@ const OwnerView = ({ user, properties, tickets, onRefresh }) => {
   }
   return (
     <div>
-      <div className="mb-6 md:mb-8">
-        <p className="text-xs md:text-sm text-primary font-semibold uppercase tracking-wide">Owner Portfolio</p>
-        <h1 className="text-2xl md:text-3xl font-bold mt-1">Welcome, {user.name}</h1>
-        <p className="text-sm md:text-base text-muted-foreground mt-1">Financial transparency across your entire portfolio.</p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 md:mb-8">
+        <div>
+          <p className="text-xs md:text-sm text-primary font-semibold uppercase tracking-wide">Owner Portfolio</p>
+          <h1 className="text-2xl md:text-3xl font-bold mt-1">Welcome, {user.name}</h1>
+          <p className="text-sm md:text-base text-muted-foreground mt-1">Financial transparency across your entire portfolio.</p>
+        </div>
+        <PropertyDialog user={user} users={[]} onSaved={onRefresh}>
+          <Button className="rounded-full gap-2 self-start md:self-auto"><Plus className="h-4 w-4" /> Add Property</Button>
+        </PropertyDialog>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StatCard icon={Building2} label="My Properties" value={stats.props} />
@@ -260,8 +285,18 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
   const [open, setOpen] = useState(false)
   const handleDelete = async () => {
     if (!confirm('Delete this property?')) return
-    const res = await fetch(`/api/properties/${property.id}`, { method: 'DELETE' })
-    if (res.ok) { toast.success('Deleted'); onRefresh() } else toast.error('Failed')
+    const res = await fetch(`/api/properties/${property.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, role: user.role }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      toast.success('Property deleted')
+      onRefresh()
+    } else {
+      toast.error(data.error || 'Failed to delete property')
+    }
   }
   return (
     <div className={standalone ? 'p-0' : 'bg-card border border-border rounded-2xl overflow-hidden'}>
@@ -287,7 +322,7 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
                   <PropertyDialog user={user} users={users} existing={property} onSaved={onRefresh}>
                     <Button variant="outline" size="sm" className="gap-1 h-8"><Edit className="h-3 w-3" /> <span className="hidden sm:inline">Edit</span></Button>
                   </PropertyDialog>
-                  {role === 'manager' && <Button variant="outline" size="sm" className="h-8" onClick={handleDelete}><Trash2 className="h-3 w-3" /></Button>}
+                  {(role === 'manager' || role === 'owner') && <Button variant="outline" size="sm" className="h-8" onClick={handleDelete}><Trash2 className="h-3 w-3" /></Button>}
                 </>
               )}
               <Button variant="ghost" size="sm" className="h-8" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Details'}</Button>
@@ -304,6 +339,11 @@ const PropertyRow = ({ property, role, user, users, onRefresh, standalone }) => 
           {open && (
             <div className="mt-6 pt-6 border-t border-border">
               <div className="grid md:grid-cols-2 gap-4">
+                <DetailCard icon={Building2} title="Property Overview" accent="emerald">
+                  <Row label="Type" value={property.propertyType || '—'} />
+                  <Row label="Description" value={property.description || '—'} />
+                </DetailCard>
+
                 {(role === 'manager' || role === 'owner') && (
                   <DetailCard icon={User} title="Tenant Details" accent="emerald">
                     <Row label="Full name" value={property.tenantName || 'Vacant'} />
@@ -436,18 +476,29 @@ const TicketRow = ({ ticket, property, canManage, onRefresh }) => {
 /* ---------------- DIALOGS ---------------- */
 const PropertyDialog = ({ children, user, users = [], existing, onSaved }) => {
   const [open, setOpen] = useState(false)
-  const empty = {
-    name: '', address: '', image: '',
+  const createEmptyForm = () => ({
+    name: '', address: '', image: '', description: '', propertyType: '',
     ownerId: '', ownerName: '',
     tenantId: '', tenantName: '', tenantEmail: '', tenantPhone: '',
     leaseStart: '', leaseEnd: '', monthlyRent: '', securityDeposit: '',
     insuranceProvider: '', insurancePolicyNumber: '', insuranceStart: '', insuranceEnd: '',
     loanProvider: '', loanAccountNumber: '', roi: '', monthlyEmi: '', loanPortalUrl: '',
-  }
-  const [form, setForm] = useState(existing || empty)
+  })
+  const [form, setForm] = useState(createEmptyForm())
+  useEffect(() => {
+    if (!open) return
+    setForm(existing ? { ...existing } : createEmptyForm())
+  }, [open, existing])
   const [saving, setSaving] = useState(false)
 
   const set = (k, v) => setForm({ ...form, [k]: v })
+
+  const handleImageUpload = async (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => set('image', reader.result)
+    reader.readAsDataURL(file)
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -460,11 +511,13 @@ const PropertyDialog = ({ children, user, users = [], existing, onSaved }) => {
       const tenant = users.find(u => u.id === form.tenantId)
       const payload = {
         ...form,
-        ownerName: owner?.name || form.ownerName,
+        ownerId: user.role === 'owner' ? user.id : (form.ownerId || ''),
+        ownerName: user.role === 'owner' ? user.name : (owner?.name || form.ownerName),
         tenantName: tenant?.name || form.tenantName,
         tenantEmail: tenant?.email || form.tenantEmail,
         tenantPhone: tenant?.phone || form.tenantPhone,
-        managerId: user.id, managerName: user.name,
+        managerId: user.role === 'manager' ? user.id : (form.managerId || ''),
+        managerName: user.role === 'manager' ? user.name : (form.managerName || ''),
       }
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) throw new Error('Save failed')
@@ -486,7 +539,20 @@ const PropertyDialog = ({ children, user, users = [], existing, onSaved }) => {
           <Section title="Basics">
             <F label="Property name"><Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Sunset Villa" /></F>
             <F label="Address" required><Input required value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 Oak St, Austin TX" /></F>
-            <F label="Image URL" full><Input value={form.image} onChange={e => set('image', e.target.value)} placeholder="https://..." /></F>
+            <F label="Property type"><Input value={form.propertyType} onChange={e => set('propertyType', e.target.value)} placeholder="Single Family, Condo, Duplex" /></F>
+            <F label="Description" full><Textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Describe the property, amenities, or notes" rows={3} /></F>
+            <F label="Property image" full>
+              <div className="space-y-2">
+                <Input value={form.image} onChange={e => set('image', e.target.value)} placeholder="Image URL or upload below" />
+                <label className="inline-flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e.target.files?.[0])} />
+                  <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2">
+                    <ImagePlus className="h-4 w-4" /> Upload image
+                  </span>
+                </label>
+                {form.image && <img src={form.image} alt="Property preview" className="h-24 w-full rounded-md object-cover border border-border" />}
+              </div>
+            </F>
           </Section>
 
           <Section title="Assignment">

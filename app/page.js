@@ -36,7 +36,7 @@ const Hero = () => (
       <div>
         <div className="inline-flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1 mb-5 md:mb-6 text-xs">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-muted-foreground">Trusted by landlords across Central Texas</span>
+          <span className="text-muted-foreground">Trusted by landlords </span>
         </div>
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
           Premium Property <span className="text-primary">Management,</span>
@@ -105,8 +105,8 @@ const HeroVisual = () => (
       <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
         <Bell className="h-3.5 w-3.5 text-primary-foreground" />
       </div>
-      <p className="text-xs font-medium">New ticket · Kurt</p>
-    </div>
+      <p className="text-xs font-medium">New ticket </p>
+     </div>
   </div>
 )
 
@@ -118,21 +118,18 @@ const PortfolioCard = () => (
       </div>
       <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-medium">Secure</span>
     </div>
-    <h3 className="font-bold text-lg mb-6">Portfolio Overview</h3>
+    <h3 className="font-bold text-lg mb-6"> Overview</h3>
     <div className="space-y-4">
       <div>
-        <p className="text-xs text-muted-foreground">Managed Properties</p>
-        <p className="text-2xl font-bold mt-1">7 Properties</p>
-      </div>
-      <div className="h-px bg-border" />
-      <div>
-        <p className="text-xs text-muted-foreground">Monthly Revenue</p>
-        <p className="text-2xl font-bold text-primary mt-1">$13,260.00</p>
+        <p className="text-xs text-muted-foreground">Manage your properties:</p>
+        <p className="text-2xl font-bold mt-1"> As a property manager</p>
+        <p className="text-2xl text-muted-foreground">As an owner</p>
+        <p className="text-2xl font-bold text-primary mt-1"> As a tenant</p>
       </div>
       <div className="h-px bg-border" />
       <div>
         <p className="text-xs text-muted-foreground">Active Agreements</p>
-        <p className="text-2xl font-bold mt-1">6 Active Leases</p>
+        <p className="text-2xl font-bold mt-1">Active Leases</p>
       </div>
     </div>
   </div>

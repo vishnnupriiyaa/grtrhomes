@@ -6,18 +6,21 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Home, ArrowLeft } from 'lucide-react'
+import { Home, ArrowLeft, Plus, Trash2, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { getRoleProfileFields, createPropertyDraft, isValidEmail, normalizeEmail } from '@/lib/onboarding.mjs'
 
 const LoginPage = () => {
   const router = useRouter()
   const [tab, setTab] = useState('login')
   const [loading, setLoading] = useState(false)
 
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+  const [loginForm, setLoginForm] = useState({ email: '', password: '', authMethod: 'email-password' })
   const [regForm, setRegForm] = useState({ name: '', email: '', password: '', phone: '', role: 'tenant' })
+  const [profileForm, setProfileForm] = useState(() => getRoleProfileFields('tenant'))
   const [recoveryMode, setRecoveryMode] = useState('none')
   const [recoveryEmail, setRecoveryEmail] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -26,11 +29,16 @@ const LoginPage = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault()
+    const normalizedEmail = normalizeEmail(loginForm.email)
+    if (!isValidEmail(normalizedEmail)) {
+      toast.error('Please use a real email address to sign in.')
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loginForm),
+        body: JSON.stringify({ ...loginForm, email: normalizedEmail }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Login failed')
@@ -48,9 +56,21 @@ const LoginPage = () => {
     e.preventDefault()
     setLoading(true)
     try {
+      const normalizedEmail = normalizeEmail(regForm.email)
+      if (!isValidEmail(normalizedEmail)) {
+        toast.error('Please use a real email address for registration.')
+        setLoading(false)
+        return
+      }
+      const payload = {
+        ...regForm,
+        email: normalizedEmail,
+        profile: profileForm,
+        authMethod: loginForm.authMethod === 'google' ? 'google' : 'email-password',
+      }
       const res = await fetch('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(regForm),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Registration failed')
@@ -62,6 +82,41 @@ const LoginPage = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRoleChange = (value) => {
+    setRegForm({ ...regForm, role: value })
+    setProfileForm(getRoleProfileFields(value))
+  }
+
+  const updateProperty = (index, field, value) => {
+    const updated = [...profileForm.properties]
+    updated[index] = { ...updated[index], [field]: value }
+    setProfileForm({ ...profileForm, properties: updated })
+  }
+
+  const addProperty = () => {
+    if (profileForm.properties.length >= 2) {
+      toast.error('You can add up to two properties during registration.')
+      return
+    }
+    setProfileForm({ ...profileForm, properties: [...profileForm.properties, createPropertyDraft()] })
+  }
+
+  const handleImageUpload = (index, file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const updated = [...profileForm.properties]
+      updated[index] = { ...updated[index], image: reader.result }
+      setProfileForm({ ...profileForm, properties: updated })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeProperty = (index) => {
+    const updated = profileForm.properties.filter((_, i) => i !== index)
+    setProfileForm({ ...profileForm, properties: updated })
   }
 
   const handleForgotPassword = async (e) => {
@@ -136,12 +191,24 @@ const LoginPage = () => {
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
                     <Label>Email</Label>
-                    <Input type="email" required value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className="mt-1.5" placeholder="you@example.com" />
+                    <Input type="email" required value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className="mt-1.5" placeholder="you@gmail.com" />
                   </div>
                   <div>
-                    <Label>Password</Label>
-                    <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
+                    <Label>Sign in with</Label>
+                    <Select value={loginForm.authMethod} onValueChange={(value) => setLoginForm({ ...loginForm, authMethod: value })}>
+                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="email-password">Email & password</SelectItem>
+                        <SelectItem value="google">Google</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+                  {loginForm.authMethod === 'email-password' && (
+                    <div>
+                      <Label>Password</Label>
+                      <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <button type="button" onClick={() => { setRecoveryMode('forgot'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Forgot password?</button>
                     <button type="button" onClick={() => { setRecoveryMode('change'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Change password</button>
@@ -182,7 +249,7 @@ const LoginPage = () => {
                       )}
                     </div>
                   )}
-                  <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : 'Sign in'}</Button>
+                  <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : loginForm.authMethod === 'google' ? 'Continue with Google' : 'Sign in'}</Button>
                 </form>
               </TabsContent>
               <TabsContent value="register" className="mt-6">
@@ -205,7 +272,7 @@ const LoginPage = () => {
                   </div>
                   <div>
                     <Label>I am a...</Label>
-                    <Select value={regForm.role} onValueChange={(v) => setRegForm({ ...regForm, role: v })}>
+                    <Select value={regForm.role} onValueChange={handleRoleChange}>
                       <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="tenant">Tenant</SelectItem>
@@ -214,6 +281,87 @@ const LoginPage = () => {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-4">
+                    <div>
+                      <Label>Profile bio</Label>
+                      <Textarea value={profileForm.bio || ''} onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })} className="mt-1.5" placeholder="Tell us a little about your role and experience" />
+                    </div>
+                    <div>
+                      <Label>Profile photo URL</Label>
+                      <Input value={profileForm.profilePhoto || ''} onChange={(e) => setProfileForm({ ...profileForm, profilePhoto: e.target.value })} className="mt-1.5" placeholder="https://..." />
+                    </div>
+
+                    {regForm.role !== 'tenant' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Company / portfolio name</Label>
+                          <Input value={profileForm.companyName || ''} onChange={(e) => setProfileForm({ ...profileForm, companyName: e.target.value })} className="mt-1.5" placeholder="Example Holdings" />
+                        </div>
+                        <div>
+                          <Label>Service area / address</Label>
+                          <Input value={profileForm.address || ''} onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} className="mt-1.5" placeholder="Austin, TX" />
+                        </div>
+                        {regForm.role === 'manager' && (
+                          <div>
+                            <Label>Managed property count</Label>
+                            <Input value={profileForm.managedPropertyCount || ''} onChange={(e) => setProfileForm({ ...profileForm, managedPropertyCount: e.target.value })} className="mt-1.5" placeholder="3" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {regForm.role === 'tenant' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Emergency contact</Label>
+                          <Input value={profileForm.emergencyContact || ''} onChange={(e) => setProfileForm({ ...profileForm, emergencyContact: e.target.value })} className="mt-1.5" placeholder="Name / phone" />
+                        </div>
+                        <div>
+                          <Label>Preferred contact</Label>
+                          <Input value={profileForm.preferredContact || ''} onChange={(e) => setProfileForm({ ...profileForm, preferredContact: e.target.value })} className="mt-1.5" placeholder="Email or phone" />
+                        </div>
+                      </div>
+                    )}
+
+                    {(regForm.role === 'owner' || regForm.role === 'manager') && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm">Properties to manage</Label>
+                          <Button type="button" variant="outline" size="sm" onClick={addProperty} className="gap-1 rounded-full">
+                            <Plus className="h-3.5 w-3.5" /> Add property
+                          </Button>
+                        </div>
+                        {profileForm.properties.map((property, index) => (
+                          <div key={`${property.name || 'property'}-${index}`} className="rounded-lg border border-border bg-background/70 p-3 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium">Property {index + 1}</p>
+                              {profileForm.properties.length > 1 && (
+                                <Button type="button" variant="ghost" size="sm" onClick={() => removeProperty(index)} className="h-8 w-8 p-0">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                              <Input value={property.name || ''} onChange={(e) => updateProperty(index, 'name', e.target.value)} placeholder="Property name" />
+                              <Input value={property.address || ''} onChange={(e) => updateProperty(index, 'address', e.target.value)} placeholder="Property address" />
+                              <Input type="number" value={property.monthlyRent || ''} onChange={(e) => updateProperty(index, 'monthlyRent', e.target.value)} placeholder="Monthly rent" />
+                              <Input value={property.image || ''} onChange={(e) => updateProperty(index, 'image', e.target.value)} placeholder="Image URL" />
+                              <label className="inline-flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(index, e.target.files?.[0])} />
+                                <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2">
+                                  <ImagePlus className="h-4 w-4" /> Upload image
+                                </span>
+                              </label>
+                              {property.image && <img src={property.image} alt={property.name || 'Property preview'} className="h-24 w-full rounded-md object-cover border border-border" />}
+                              <Textarea value={property.description || ''} onChange={(e) => updateProperty(index, 'description', e.target.value)} placeholder="Short description" rows={2} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Creating...' : 'Create account'}</Button>
                 </form>
               </TabsContent>

@@ -1,22 +1,45 @@
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
+import { buildUserRegistrationDocument, getAccountDeletionTargets, isValidEmail, normalizeEmail } from '@/lib/onboarding.mjs'
 
 let client
-let db
+let clientPromise
+
+async function createMongoClient(mongoUrl) {
+  const nextClient = new MongoClient(mongoUrl, {
+    maxPoolSize: 10,
+    minPoolSize: 0,
+    retryWrites: true,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+  })
+  await nextClient.connect()
+  return nextClient
+}
 
 async function connectToMongo() {
   const mongoUrl = process.env.MONGO_URL || process.env.MONGODB_URI || process.env.GRTRHOMES_MONGODB_URI || process.env.grtrhomes_MONGODB_URI
   if (!mongoUrl) {
     throw new Error('Missing MongoDB connection string. Set MONGO_URL, MONGODB_URI, or GRTRHOMES_MONGODB_URI.')
   }
+  const dbName = process.env.DB_NAME || 'grtr_homes'
 
-  if (!client) {
-    client = new MongoClient(mongoUrl)
-    await client.connect()
-    db = client.db(process.env.DB_NAME || 'grtr_homes')
+  if (!clientPromise) {
+    clientPromise = createMongoClient(mongoUrl)
   }
-  return db
+
+  try {
+    client = await clientPromise
+    await client.db(dbName).command({ ping: 1 })
+  } catch (error) {
+    console.warn('MongoDB reconnect triggered:', error?.message)
+    clientPromise = createMongoClient(mongoUrl)
+    client = await clientPromise
+  }
+
+  return client.db(dbName)
 }
 
 function handleCORS(response) {
@@ -48,22 +71,66 @@ async function handleRoute(request, { params }) {
     /* ---------- AUTH ---------- */
     if (route === '/auth/register' && method === 'POST') {
       const b = await request.json()
-      if (!b.email || !b.password || !b.name || !b.role) return err('email, password, name, role required')
-      const existing = await db.collection('users').findOne({ email: b.email })
+      const normalizedEmail = normalizeEmail(b.email)
+      if (!normalizedEmail || !b.password || !b.name || !b.role) return err('email, password, name, role required')
+      if (!isValidEmail(normalizedEmail)) return err('Please use a real email address')
+      const existing = await db.collection('users').findOne({ email: normalizedEmail })
       if (existing) return err('Email already registered')
-      const user = {
-        id: uuidv4(), email: b.email, password: b.password, name: b.name,
-        phone: b.phone || '', role: b.role, createdAt: new Date().toISOString(),
-      }
+      const user = buildUserRegistrationDocument({ ...b, email: normalizedEmail }, uuidv4())
       await db.collection('users').insertOne(user)
+      if ((b.role === 'owner' || b.role === 'manager') && Array.isArray(b.profile?.properties)) {
+        const propertyDocs = b.profile.properties
+          .filter(Boolean)
+          .map((property, index) => ({
+            id: uuidv4(),
+            name: property.name || `Property ${index + 1}`,
+            address: property.address || '',
+            image: property.image || '',
+            description: property.description || '',
+            monthlyRent: property.monthlyRent || '',
+            ownerId: user.id,
+            ownerName: user.name,
+            tenantId: '',
+            tenantName: '',
+            tenantEmail: '',
+            tenantPhone: '',
+            managerId: b.role === 'manager' ? user.id : '',
+            managerName: b.role === 'manager' ? user.name : '',
+            createdAt: new Date().toISOString(),
+          }))
+        if (propertyDocs.length) {
+          await db.collection('properties').insertMany(propertyDocs)
+        }
+      }
       return ok({ user: clean(user) })
     }
 
     if (route === '/auth/login' && method === 'POST') {
       const b = await request.json()
-      const user = await db.collection('users').findOne({ email: b.email, password: b.password })
+      const normalizedEmail = normalizeEmail(b.email)
+      if (!isValidEmail(normalizedEmail)) return err('Please use a real email address', 401)
+      const user = await db.collection('users').findOne({ email: normalizedEmail, password: b.password })
       if (!user) return err('Invalid email or password', 401)
       return ok({ user: clean(user) })
+    }
+
+    if (route === '/auth/delete-account' && method === 'POST') {
+      const b = await request.json()
+      const normalizedEmail = normalizeEmail(b.email)
+      if (!normalizedEmail || !b.userId) return err('userId and email required')
+      const user = b.userId
+        ? await db.collection('users').findOne({ id: b.userId })
+        : await db.collection('users').findOne({ email: normalizedEmail })
+      if (!user) return err('Account not found', 404)
+      if (normalizeEmail(user.email) !== normalizedEmail) return err('Account verification failed', 403)
+      const targets = getAccountDeletionTargets(user)
+      await db.collection('users').deleteOne({ id: user.id })
+      await db.collection('properties').deleteMany(targets.propertyQuery)
+      await db.collection('properties').updateMany(targets.tenantAssignmentQuery, {
+        $set: { tenantId: '', tenantName: '', tenantEmail: '', tenantPhone: '' },
+      })
+      await db.collection('tickets').deleteMany(targets.ticketQuery)
+      return ok({ deleted: true, email: targets.email })
     }
 
     if (route === '/auth/forgot-password' && method === 'POST') {
@@ -105,7 +172,12 @@ async function handleRoute(request, { params }) {
 
     if (route === '/properties' && method === 'POST') {
       const b = await request.json()
-      const p = { id: uuidv4(), ...b, createdAt: new Date().toISOString() }
+      const p = {
+        id: uuidv4(),
+        ...b,
+        images: Array.isArray(b.images) ? b.images : (b.image ? [b.image] : []),
+        createdAt: new Date().toISOString(),
+      }
       await db.collection('properties').insertOne(p)
       return ok(clean(p))
     }
@@ -125,7 +197,22 @@ async function handleRoute(request, { params }) {
         return ok(clean(updated))
       }
       if (method === 'DELETE') {
+        const b = await request.json().catch(() => ({}))
+        const requesterUserId = b.userId
+        const requesterRole = b.role
+        if (!requesterUserId || !requesterRole) return err('userId and role required', 401)
+
+        const property = await db.collection('properties').findOne({ id })
+        if (!property) return err('Property not found', 404)
+
+        const canDelete =
+          (requesterRole === 'owner' && property.ownerId === requesterUserId) ||
+          (requesterRole === 'manager' && (!property.managerId || property.managerId === requesterUserId))
+
+        if (!canDelete) return err('Not authorized to delete this property', 403)
+
         await db.collection('properties').deleteOne({ id })
+        await db.collection('tickets').deleteMany({ propertyId: id })
         return ok({ deleted: true })
       }
     }
@@ -404,7 +491,6 @@ async function handleRoute(request, { params }) {
     return err('Internal server error: ' + e.message, 500)
   }
 }
-
 export const GET = handleRoute
 export const POST = handleRoute
 export const PUT = handleRoute
