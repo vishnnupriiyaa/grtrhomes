@@ -1,5 +1,7 @@
+import { randomInt } from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
+import { isMailConfigured, sendEmail } from '@/lib/mail'
 import { connectToMongo } from '@/lib/mongo'
 import { buildUserRegistrationDocument, getAccountDeletionTargets, isGoogleMailAccount, isValidEmail, normalizeEmail } from '@/lib/onboarding.mjs'
 
@@ -18,6 +20,100 @@ export async function OPTIONS() {
 const clean = (doc) => { if (!doc) return doc; const { _id, password, ...rest } = doc; return rest }
 const ok = (data, status = 200) => handleCORS(NextResponse.json(data, { status }))
 const err = (msg, status = 400) => handleCORS(NextResponse.json({ error: msg }, { status }))
+
+async function resolveTicketRecipients(db, property, payload = {}) {
+  const relatedUsers = property?.ownerId || property?.managerId
+    ? await db.collection('users').find({ id: { $in: [property?.ownerId, property?.managerId].filter(Boolean) } }).toArray()
+    : []
+
+  const owner = relatedUsers.find((candidate) => candidate.id === property?.ownerId)
+  const manager = relatedUsers.find((candidate) => candidate.id === property?.managerId)
+
+  const candidates = [
+    { role: 'owner', email: normalizeEmail(payload.ownerEmail || property?.ownerEmail || owner?.email), name: owner?.name || property?.ownerName || 'Owner' },
+    { role: 'manager', email: normalizeEmail(payload.managerEmail || property?.managerEmail || manager?.email), name: manager?.name || property?.managerName || 'Manager' },
+    { role: 'tenant', email: normalizeEmail(payload.tenantEmail), name: payload.tenantName || 'Tenant' },
+  ]
+
+  const seen = new Set()
+  const recipients = candidates.filter(({ email }) => {
+    if (!isValidEmail(email) || seen.has(email)) return false
+    seen.add(email)
+    return true
+  })
+
+  return { owner, manager, recipients }
+}
+
+async function sendTicketEmails({ recipients, ticket, property, eventType }) {
+  if (!recipients.length) return []
+  if (!isMailConfigured()) {
+    return recipients.map((recipient) => ({
+      to: recipient.email,
+      role: recipient.role,
+      method: 'email',
+      status: 'skipped',
+      reason: 'SMTP email delivery is not configured',
+      at: new Date().toISOString(),
+    }))
+  }
+
+  const isCreated = eventType === 'created'
+  const subject = isCreated
+    ? `New maintenance ticket for ${property?.address || 'your property'}`
+    : `Maintenance ticket updated: ${ticket.title}`
+  const headline = isCreated ? 'A new maintenance ticket has been submitted.' : 'A maintenance ticket has been updated.'
+  const statusLine = `Status: ${String(ticket.status || 'open').replace('_', ' ')}`
+  const bodyText = [
+    headline,
+    `Property: ${property?.address || ticket.propertyAddress || 'Unknown property'}`,
+    `Title: ${ticket.title}`,
+    `Priority: ${ticket.priority}`,
+    statusLine,
+    `Tenant: ${ticket.tenantName || 'Unknown tenant'}${ticket.tenantEmail ? ` (${ticket.tenantEmail})` : ''}`,
+    '',
+    ticket.description || '',
+  ].join('\n')
+
+  return Promise.all(recipients.map(async (recipient) => {
+    try {
+      const delivery = await sendEmail({
+        to: recipient.email,
+        subject,
+        text: bodyText,
+        html: `
+          <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+            <h2 style="margin-bottom: 12px;">${headline}</h2>
+            <p><strong>Property:</strong> ${property?.address || ticket.propertyAddress || 'Unknown property'}</p>
+            <p><strong>Title:</strong> ${ticket.title}</p>
+            <p><strong>Priority:</strong> ${ticket.priority}</p>
+            <p><strong>Status:</strong> ${String(ticket.status || 'open').replace('_', ' ')}</p>
+            <p><strong>Tenant:</strong> ${ticket.tenantName || 'Unknown tenant'}${ticket.tenantEmail ? ` (${ticket.tenantEmail})` : ''}</p>
+            <p style="margin-top: 16px;"><strong>Description</strong><br />${ticket.description || ''}</p>
+          </div>
+        `,
+      })
+
+      return {
+        to: recipient.email,
+        role: recipient.role,
+        method: 'email',
+        status: 'delivered',
+        messageId: delivery.messageId,
+        at: new Date().toISOString(),
+      }
+    } catch (emailError) {
+      return {
+        to: recipient.email,
+        role: recipient.role,
+        method: 'email',
+        status: 'failed',
+        reason: emailError.message,
+        at: new Date().toISOString(),
+      }
+    }
+  }))
+}
 
 async function handleRoute(request, { params }) {
   const { path = [] } = await params
@@ -95,6 +191,17 @@ async function handleRoute(request, { params }) {
         : await db.collection('users').findOne({ email: normalizedEmail })
       if (!user) return err('Account not found', 404)
       if (normalizeEmail(user.email) !== normalizedEmail) return err('Account verification failed', 403)
+      if (b.verificationMethod === 'otp') {
+        const otp = String(b.otp || '').trim()
+        if (!otp) return err('OTP is required to delete this account')
+        if (!user.deleteAccountOtpCode || !user.deleteAccountOtpExpiresAt) return err('No active deletion OTP found', 401)
+        if (new Date(user.deleteAccountOtpExpiresAt).getTime() < Date.now()) return err('Your deletion OTP has expired', 401)
+        if (user.deleteAccountOtpCode !== otp) return err('The deletion OTP is incorrect', 401)
+      } else {
+        if (!user.password) return err('This account must be verified with an emailed OTP before deletion', 400)
+        if (!b.currentPassword) return err('Current password is required to delete this account', 401)
+        if (user.password !== b.currentPassword) return err('Current password is incorrect', 401)
+      }
       const targets = getAccountDeletionTargets(user)
       await db.collection('users').deleteOne({ id: user.id })
       await db.collection('properties').deleteMany(targets.propertyQuery)
@@ -103,6 +210,46 @@ async function handleRoute(request, { params }) {
       })
       await db.collection('tickets').deleteMany(targets.ticketQuery)
       return ok({ deleted: true, email: targets.email })
+    }
+
+    if (route === '/auth/delete-account/request-otp' && method === 'POST') {
+      const b = await request.json()
+      const normalizedEmail = normalizeEmail(b.email)
+      if (!normalizedEmail || !b.userId) return err('userId and email required')
+      if (!isMailConfigured()) return err('SMTP email delivery is not configured for OTP verification', 503)
+      const user = await db.collection('users').findOne({ id: b.userId })
+      if (!user) return err('Account not found', 404)
+      if (normalizeEmail(user.email) !== normalizedEmail) return err('Account verification failed', 403)
+
+      const otp = String(randomInt(0, 1000000)).padStart(6, '0')
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+
+      await db.collection('users').updateOne(
+        { id: user.id },
+        {
+          $set: {
+            deleteAccountOtpCode: otp,
+            deleteAccountOtpExpiresAt: expiresAt,
+            deleteAccountOtpRequestedAt: new Date().toISOString(),
+          },
+        },
+      )
+
+      await sendEmail({
+        to: normalizedEmail,
+        subject: 'GRTR Homes account deletion verification code',
+        text: `Use this code to confirm deletion of your GRTR Homes account: ${otp}. This code expires in 10 minutes.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+            <h2>Confirm account deletion</h2>
+            <p>Use this code to confirm deletion of your GRTR Homes account.</p>
+            <p style="font-size: 24px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+            <p>This code expires in 10 minutes.</p>
+          </div>
+        `,
+      })
+
+      return ok({ message: 'A deletion verification code has been sent to your email address.' })
     }
 
     if (route === '/auth/forgot-password' && method === 'POST') {
@@ -207,22 +354,37 @@ async function handleRoute(request, { params }) {
     if (route === '/tickets' && method === 'POST') {
       const b = await request.json()
       const property = await db.collection('properties').findOne({ id: b.propertyId })
-      const ownerEmail = b.ownerEmail || property?.ownerEmail || ''
-      const managerEmail = b.managerEmail || property?.managerEmail || ''
+      if (!property) return err('Property not found', 404)
+      const { owner, manager, recipients } = await resolveTicketRecipients(db, property, b)
+      const ownerEmail = normalizeEmail(property?.ownerEmail || owner?.email || b.ownerEmail || '')
+      const managerEmail = normalizeEmail(property?.managerEmail || manager?.email || b.managerEmail || '')
       const t = {
         id: uuidv4(), ...b, status: 'open',
         propertyAddress: property?.address,
         ownerId: property?.ownerId, ownerEmail,
         managerId: property?.managerId, managerEmail,
         createdAt: new Date().toISOString(),
-        notifications: [
-          { to: ownerEmail || property?.ownerName || 'Owner', method: 'email', at: new Date().toISOString() },
-          { to: managerEmail || property?.managerName || 'Manager', method: 'email', at: new Date().toISOString() },
-        ],
+        notifications: [],
       }
       await db.collection('tickets').insertOne(t)
-      console.log(`[EMAIL MOCKED] Ticket "${t.title}" sent to owner + manager for ${property?.address}`)
-      return ok(clean(t))
+      const notifications = await sendTicketEmails({ recipients: recipients.filter((recipient) => recipient.role !== 'tenant'), ticket: t, property, eventType: 'created' })
+      await db.collection('tickets').updateOne(
+        { id: t.id },
+        {
+          $set: {
+            notifications,
+          },
+        },
+      )
+      return ok(clean({
+        ...t,
+        notifications,
+        notificationSummary: {
+          delivered: notifications.filter((item) => item.status === 'delivered').length,
+          failed: notifications.filter((item) => item.status === 'failed').length,
+          skipped: notifications.filter((item) => item.status === 'skipped').length,
+        },
+      }))
     }
 
     const ticketMatch = route.match(/^\/tickets\/([^/]+)$/)
@@ -231,8 +393,24 @@ async function handleRoute(request, { params }) {
       if (method === 'PUT') {
         const b = await request.json()
         delete b._id; delete b.id
+        const existingTicket = await db.collection('tickets').findOne({ id })
+        const nextStatus = b.status || existingTicket?.status
         await db.collection('tickets').updateOne({ id }, { $set: { ...b, updatedAt: new Date().toISOString() } })
         const updated = await db.collection('tickets').findOne({ id })
+        if (existingTicket && updated && nextStatus !== existingTicket.status) {
+          const property = await db.collection('properties').findOne({ id: updated.propertyId })
+          const { recipients } = await resolveTicketRecipients(db, property, updated)
+          const notifications = await sendTicketEmails({ recipients, ticket: updated, property, eventType: 'updated' })
+          await db.collection('tickets').updateOne(
+            { id },
+            {
+              $set: {
+                notifications: [...(updated.notifications || []), ...notifications],
+              },
+            },
+          )
+          updated.notifications = [...(updated.notifications || []), ...notifications]
+        }
         return ok(clean(updated))
       }
       if (method === 'DELETE') {

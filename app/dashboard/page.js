@@ -42,6 +42,12 @@ const DashboardPage = () => {
   const [tickets, setTickets] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteVerificationMethod, setDeleteVerificationMethod] = useState('password')
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteOtp, setDeleteOtp] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteOtpSending, setDeleteOtpSending] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem('grtr_user')
@@ -61,6 +67,11 @@ const DashboardPage = () => {
 
     router.push('/login')
   }, [router, session, status])
+
+  useEffect(() => {
+    if (!user) return
+    setDeleteVerificationMethod(user.authMethod === 'google' ? 'otp' : 'password')
+  }, [user])
 
   const hydrateGoogleUser = async () => {
     try {
@@ -103,14 +114,43 @@ const DashboardPage = () => {
     router.push('/')
   }
 
-  const deleteAccount = async () => {
-    const confirmed = window.confirm('This will permanently delete your account and related records. Continue?')
-    if (!confirmed) return
+  const requestDeleteOtp = async () => {
+    setDeleteOtpSending(true)
     try {
-      const res = await fetch('/api/auth/delete-account', {
+      const res = await fetch('/api/auth/delete-account/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, email: user.email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to send deletion verification code')
+      toast.success(data.message || 'Deletion verification code sent')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleteOtpSending(false)
+    }
+  }
+
+  const deleteAccount = async () => {
+    setDeleteLoading(true)
+    try {
+      const payload = {
+        userId: user.id,
+        email: user.email,
+        verificationMethod: deleteVerificationMethod,
+      }
+
+      if (deleteVerificationMethod === 'otp') {
+        payload.otp = deleteOtp
+      } else {
+        payload.currentPassword = deletePassword
+      }
+
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Unable to delete account')
@@ -120,6 +160,8 @@ const DashboardPage = () => {
       router.push('/login')
     } catch (err) {
       toast.error(err.message)
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -144,7 +186,57 @@ const DashboardPage = () => {
               {user.name?.charAt(0)?.toUpperCase()}
             </div>
             <Button variant="ghost" size="sm" onClick={logout} className="h-9 w-9 p-0 md:h-9 md:w-auto md:px-3"><LogOut className="h-4 w-4" /></Button>
-            <Button variant="destructive" size="sm" onClick={deleteAccount} className="h-9 px-3">Delete account</Button>
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" size="sm" className="h-9 px-3">Delete account</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Delete account</DialogTitle>
+                </DialogHeader>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    deleteAccount()
+                  }}
+                  className="space-y-4"
+                >
+                  <p className="text-sm text-muted-foreground">This permanently deletes your account, related tickets, and owned property records.</p>
+                  {user.authMethod !== 'google' && (
+                    <div>
+                      <Label>Verify with</Label>
+                      <Select value={deleteVerificationMethod} onValueChange={setDeleteVerificationMethod}>
+                        <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="password">Current password</SelectItem>
+                          <SelectItem value="otp">Email OTP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {deleteVerificationMethod === 'otp' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Verification code</Label>
+                        <Input value={deleteOtp} onChange={(event) => setDeleteOtp(event.target.value)} className="mt-1.5" placeholder="Enter the 6-digit code" required />
+                      </div>
+                      <Button type="button" variant="outline" onClick={requestDeleteOtp} disabled={deleteOtpSending} className="w-full">
+                        {deleteOtpSending ? 'Sending code...' : 'Send verification code'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <Label>Current password</Label>
+                      <Input type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} className="mt-1.5" placeholder="Enter your current password" required />
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+                    <Button type="submit" variant="destructive" disabled={deleteLoading}>{deleteLoading ? 'Deleting...' : 'Delete account'}</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </nav>
@@ -651,7 +743,6 @@ const F = ({ label, children, required, full }) => (
 const TicketDialog = ({ children, user, property, onSaved }) => {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium' })
-  const [recipientEmails, setRecipientEmails] = useState({ ownerEmail: '', managerEmail: '' })
   const [saving, setSaving] = useState(false)
   const submit = async (e) => {
     e.preventDefault()
@@ -662,13 +753,21 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
         body: JSON.stringify({
           ...form, propertyId: property.id,
           tenantId: user.id, tenantName: user.name, tenantEmail: user.email,
-          ownerEmail: recipientEmails.ownerEmail,
-          managerEmail: recipientEmails.managerEmail,
         }),
       })
+      const data = await res.json()
       if (!res.ok) throw new Error('Failed')
-      toast.success('Ticket submitted — owner and manager notified by email')
-      setOpen(false); setForm({ title: '', description: '', priority: 'medium' }); setRecipientEmails({ ownerEmail: '', managerEmail: '' }); onSaved()
+      const delivered = data.notificationSummary?.delivered || 0
+      const failed = data.notificationSummary?.failed || 0
+      const skipped = data.notificationSummary?.skipped || 0
+      if (delivered > 0 && failed === 0 && skipped === 0) {
+        toast.success('Ticket submitted and notification emails were sent')
+      } else if (delivered > 0) {
+        toast.success('Ticket submitted. Some notification emails could not be delivered.')
+      } else {
+        toast.success('Ticket submitted. Email delivery is pending or not configured yet.')
+      }
+      setOpen(false); setForm({ title: '', description: '', priority: 'medium' }); onSaved()
     } catch (err) { toast.error(err.message) }
     finally { setSaving(false) }
   }
@@ -680,8 +779,7 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
         <form onSubmit={submit} className="space-y-4">
           <div><Label>Title</Label><Input required className="mt-1" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Leaking kitchen sink" /></div>
           <div><Label>Description</Label><Textarea required rows={4} className="mt-1" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
-          <div><Label>Owner email</Label><Input type="email" required className="mt-1" value={recipientEmails.ownerEmail} onChange={e => setRecipientEmails({ ...recipientEmails, ownerEmail: e.target.value })} placeholder="owner@example.com" /></div>
-          <div><Label>Manager email</Label><Input type="email" required className="mt-1" value={recipientEmails.managerEmail} onChange={e => setRecipientEmails({ ...recipientEmails, managerEmail: e.target.value })} placeholder="manager@example.com" /></div>
+          <p className="text-sm text-muted-foreground">Owner and manager emails are resolved automatically from the property account records.</p>
           <div><Label>Priority</Label>
             <Select value={form.priority} onValueChange={v => setForm({ ...form, priority: v })}>
               <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>

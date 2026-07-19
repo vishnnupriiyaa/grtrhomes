@@ -2,7 +2,8 @@ import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
 import { connectToMongo } from '@/lib/mongo'
-import { isGoogleMailAccount, normalizeEmail } from '@/lib/onboarding.mjs'
+import { v4 as uuidv4 } from 'uuid'
+import { getRoleProfileFields, isGoogleMailAccount, normalizeEmail } from '@/lib/onboarding.mjs'
 
 const clean = (doc) => {
   if (!doc) return doc
@@ -13,6 +14,8 @@ const clean = (doc) => {
 export async function GET() {
   const session = await getServerSession(authOptions)
   const email = normalizeEmail(session?.user?.email)
+  const name = session?.user?.name?.trim() || email.split('@')[0]
+  const image = session?.user?.image || ''
 
   if (!session?.user || !email) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -23,21 +26,53 @@ export async function GET() {
   }
 
   const db = await connectToMongo()
-  const user = await db.collection('users').findOne({ email })
+  let user = await db.collection('users').findOne({ email })
 
   if (!user) {
-    return NextResponse.json({ error: 'No portal account found for this Google account' }, { status: 404 })
+    const profile = {
+      ...getRoleProfileFields('tenant'),
+      profilePhoto: image,
+    }
+
+    user = {
+      id: uuidv4(),
+      email,
+      password: '',
+      name,
+      phone: '',
+      role: 'tenant',
+      createdAt: new Date().toISOString(),
+      profile,
+      authMethod: 'google',
+      lastGoogleSignInAt: new Date().toISOString(),
+    }
+
+    await db.collection('users').insertOne(user)
+    return NextResponse.json({ user: clean(user), provisioned: true })
   }
 
   await db.collection('users').updateOne(
     { id: user.id },
     {
       $set: {
+        name,
+        authMethod: user.authMethod || 'google',
+        'profile.profilePhoto': image || user.profile?.profilePhoto || '',
         updatedAt: new Date().toISOString(),
         lastGoogleSignInAt: new Date().toISOString(),
       },
     },
   )
 
-  return NextResponse.json({ user: clean(user) })
+  return NextResponse.json({
+    user: clean({
+      ...user,
+      name,
+      authMethod: user.authMethod || 'google',
+      profile: {
+        ...(user.profile || {}),
+        profilePhoto: image || user.profile?.profilePhoto || '',
+      },
+    }),
+  })
 }
