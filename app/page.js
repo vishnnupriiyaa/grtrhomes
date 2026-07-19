@@ -72,10 +72,7 @@ const HeroVisual = () => (
       <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
         <DollarSign className="h-5 w-5 text-emerald-600" />
       </div>
-      <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Rent received</p>
-        <p className="text-sm font-bold">+$2,450.00</p>
-      </div>
+      <div className="text-sm font-semibold">Rent received</div>
     </div>
 
     {/* Floating chip: Ticket resolved */}
