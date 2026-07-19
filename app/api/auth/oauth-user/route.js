@@ -21,8 +21,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  if (session.user.provider !== 'google' || !session.user.emailVerified || !isGoogleMailAccount(email)) {
-    return NextResponse.json({ error: 'Google account verification failed' }, { status: 403 })
+  if (session.user.provider !== 'auth0' || !session.user.emailVerified || !isGoogleMailAccount(email)) {
+    return NextResponse.json({ error: 'Social account verification failed' }, { status: 403 })
   }
 
   const db = await connectToMongo()
@@ -43,7 +43,7 @@ export async function GET() {
       role: 'tenant',
       createdAt: new Date().toISOString(),
       profile,
-      authMethod: 'google',
+      authMethod: 'oauth',
       lastGoogleSignInAt: new Date().toISOString(),
     }
 
@@ -56,7 +56,7 @@ export async function GET() {
     {
       $set: {
         name,
-        authMethod: user.authMethod || 'google',
+        authMethod: user.authMethod || 'oauth',
         'profile.profilePhoto': image || user.profile?.profilePhoto || '',
         updatedAt: new Date().toISOString(),
         lastGoogleSignInAt: new Date().toISOString(),
@@ -68,7 +68,7 @@ export async function GET() {
     user: clean({
       ...user,
       name,
-      authMethod: user.authMethod || 'google',
+      authMethod: user.authMethod || 'oauth',
       profile: {
         ...(user.profile || {}),
         profilePhoto: image || user.profile?.profilePhoto || '',

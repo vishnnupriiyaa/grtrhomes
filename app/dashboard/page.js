@@ -60,7 +60,7 @@ const DashboardPage = () => {
 
     if (status === 'loading') return
 
-    if (session?.user?.provider === 'google') {
+    if (session?.user?.provider === 'auth0') {
       hydrateGoogleUser()
       return
     }
@@ -70,14 +70,14 @@ const DashboardPage = () => {
 
   useEffect(() => {
     if (!user) return
-    setDeleteVerificationMethod(user.authMethod === 'google' ? 'otp' : 'password')
+    setDeleteVerificationMethod(user.authMethod !== 'email-password' ? 'otp' : 'password')
   }, [user])
 
   const hydrateGoogleUser = async () => {
     try {
       const res = await fetch('/api/auth/oauth-user')
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Unable to complete Google sign-in')
+      if (!res.ok) throw new Error(data.error || 'Unable to complete social sign-in')
       localStorage.setItem('grtr_user', JSON.stringify(data.user))
       setUser(data.user)
       toast.success(`Welcome back, ${data.user.name}!`)
@@ -85,7 +85,7 @@ const DashboardPage = () => {
     } catch (err) {
       localStorage.removeItem('grtr_user')
       toast.error(err.message)
-      await signOut({ callbackUrl: '/login?error=google-account-not-registered' })
+      await signOut({ callbackUrl: '/login?error=social-account-not-registered' })
     }
   }
 

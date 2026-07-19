@@ -33,11 +33,11 @@ const LoginPage = () => {
     if (!error) return
 
     const messages = {
-      'google-account-not-allowed': 'Continue with Google only works with verified Gmail accounts.',
-      'google-account-not-registered': 'No portal account exists for this Google account. Register first, then try Google sign-in again.',
+      'social-account-not-allowed': 'Continue with Google only works with verified Gmail accounts.',
+      'social-account-not-registered': 'No portal account could be created for this Google account. Please try again.',
       AccessDenied: 'Google sign-in was denied. Use a verified Gmail account linked to your portal access.',
       OAuthAccountNotLinked: 'This Google account is not linked for sign-in here.',
-      Configuration: 'Google sign-in is not configured yet. Add the Google OAuth environment variables.',
+      Configuration: 'Social sign-in is not configured yet. Add the Auth0 environment variables.',
     }
 
     toast.error(messages[error] || 'Google sign-in failed. Please try again.')
@@ -46,7 +46,7 @@ const LoginPage = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true)
     try {
-      await signIn('google', { callbackUrl: '/dashboard' })
+      await signIn('auth0', { callbackUrl: '/dashboard' })
     } catch (err) {
       toast.error(err.message || 'Unable to start Google sign-in')
       setLoading(false)
