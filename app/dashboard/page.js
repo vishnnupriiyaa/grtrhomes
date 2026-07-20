@@ -75,7 +75,7 @@ const DashboardPage = () => {
 
   const hydrateGoogleUser = async () => {
     try {
-      const res = await fetch('/api/auth/oauth-user')
+      const res = await fetch('/api/app-auth/oauth-user')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Unable to complete social sign-in')
       localStorage.setItem('grtr_user', JSON.stringify(data.user))
@@ -117,7 +117,7 @@ const DashboardPage = () => {
   const requestDeleteOtp = async () => {
     setDeleteOtpSending(true)
     try {
-      const res = await fetch('/api/auth/delete-account/request-otp', {
+      const res = await fetch('/api/app-auth/delete-account/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, email: user.email }),
@@ -147,7 +147,7 @@ const DashboardPage = () => {
         payload.currentPassword = deletePassword
       }
 
-      const res = await fetch('/api/auth/delete-account', {
+      const res = await fetch('/api/app-auth/delete-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -202,7 +202,7 @@ const DashboardPage = () => {
                   className="space-y-4"
                 >
                   <p className="text-sm text-muted-foreground">This permanently deletes your account, related tickets, and owned property records.</p>
-                  {user.authMethod !== 'google' && (
+                  {user.authMethod === 'email-password' && (
                     <div>
                       <Label>Verify with</Label>
                       <Select value={deleteVerificationMethod} onValueChange={setDeleteVerificationMethod}>
@@ -744,8 +744,15 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium' })
   const [saving, setSaving] = useState(false)
+  const hasDirectNotificationEmail = Boolean(property?.ownerEmail || property?.managerEmail)
+  const hasAccountNotificationTarget = Boolean(property?.ownerId || property?.managerId)
+  const canAttemptNotification = hasDirectNotificationEmail || hasAccountNotificationTarget
   const submit = async (e) => {
     e.preventDefault()
+    if (!canAttemptNotification) {
+      toast.error('This property is missing owner/manager notification details. Contact support before raising a ticket.')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch('/api/tickets', {
@@ -756,7 +763,7 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error('Failed')
+      if (!res.ok) throw new Error(data.error || 'Failed')
       const delivered = data.notificationSummary?.delivered || 0
       const failed = data.notificationSummary?.failed || 0
       const skipped = data.notificationSummary?.skipped || 0
@@ -779,6 +786,16 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
         <form onSubmit={submit} className="space-y-4">
           <div><Label>Title</Label><Input required className="mt-1" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Leaking kitchen sink" /></div>
           <div><Label>Description</Label><Textarea required rows={4} className="mt-1" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+          {!hasDirectNotificationEmail && hasAccountNotificationTarget && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Owner/manager email is not stored directly on this property. Notifications will use the linked owner/manager account email.
+            </p>
+          )}
+          {!canAttemptNotification && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              No owner or manager notification target is configured for this property. Ticket submission will be blocked until this is fixed.
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">Owner and manager emails are resolved automatically from the property account records.</p>
           <div><Label>Priority</Label>
             <Select value={form.priority} onValueChange={v => setForm({ ...form, priority: v })}>
@@ -792,7 +809,7 @@ const TicketDialog = ({ children, user, property, onSaved }) => {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? 'Submitting...' : 'Submit ticket'}</Button>
+            <Button type="submit" disabled={saving || !canAttemptNotification}>{saving ? 'Submitting...' : 'Submit ticket'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

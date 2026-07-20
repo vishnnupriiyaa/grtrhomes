@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
 import { connectToMongo } from '@/lib/mongo'
 import { v4 as uuidv4 } from 'uuid'
-import { getRoleProfileFields, isGoogleMailAccount, normalizeEmail } from '@/lib/onboarding.mjs'
+import { getRoleProfileFields, normalizeEmail } from '@/lib/onboarding.mjs'
 
 const clean = (doc) => {
   if (!doc) return doc
@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  if (session.user.provider !== 'auth0' || !session.user.emailVerified || !isGoogleMailAccount(email)) {
+  if (session.user.provider !== 'auth0' || !session.user.emailVerified) {
     return NextResponse.json({ error: 'Social account verification failed' }, { status: 403 })
   }
 
@@ -44,6 +44,8 @@ export async function GET() {
       createdAt: new Date().toISOString(),
       profile,
       authMethod: 'oauth',
+      emailVerified: true,
+      emailVerifiedAt: new Date().toISOString(),
       lastGoogleSignInAt: new Date().toISOString(),
     }
 
@@ -57,6 +59,8 @@ export async function GET() {
       $set: {
         name,
         authMethod: user.authMethod || 'oauth',
+        emailVerified: true,
+        emailVerifiedAt: user.emailVerifiedAt || new Date().toISOString(),
         'profile.profilePhoto': image || user.profile?.profilePhoto || '',
         updatedAt: new Date().toISOString(),
         lastGoogleSignInAt: new Date().toISOString(),

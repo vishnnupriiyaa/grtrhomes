@@ -1,9 +1,9 @@
-import { randomInt } from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import { isMailConfigured, sendEmail } from '@/lib/mail'
 import { connectToMongo } from '@/lib/mongo'
 import { buildUserRegistrationDocument, getAccountDeletionTargets, isGoogleMailAccount, isValidEmail, normalizeEmail } from '@/lib/onboarding.mjs'
+import { generateOtp, hashOtp, hashPassword, isOtpExpired, validatePasswordSecurity, verifyPassword } from '@/lib/security'
 
 function handleCORS(response) {
   response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
@@ -17,7 +17,23 @@ export async function OPTIONS() {
   return handleCORS(new NextResponse(null, { status: 200 }))
 }
 
-const clean = (doc) => { if (!doc) return doc; const { _id, password, ...rest } = doc; return rest }
+const clean = (doc) => {
+  if (!doc) return doc
+  const {
+    _id,
+    password,
+    deleteAccountOtpCode,
+    deleteAccountOtpHash,
+    deleteAccountOtpExpiresAt,
+    deleteAccountOtpRequestedAt,
+    resetPasswordOtpHash,
+    resetPasswordOtpExpiresAt,
+    resetPasswordOtpRequestedAt,
+    ...rest
+  } = doc
+  return rest
+}
+
 const ok = (data, status = 200) => handleCORS(NextResponse.json(data, { status }))
 const err = (msg, status = 400) => handleCORS(NextResponse.json({ error: msg }, { status }))
 
@@ -43,6 +59,44 @@ async function resolveTicketRecipients(db, property, payload = {}) {
   })
 
   return { owner, manager, recipients }
+}
+
+function buildPropertyDocumentsForUser(user, role, properties = []) {
+  return properties
+    .filter(Boolean)
+    .map((property, index) => ({
+      id: uuidv4(),
+      name: property.name || `Property ${index + 1}`,
+      address: property.address || '',
+      image: property.image || '',
+      description: property.description || '',
+      monthlyRent: property.monthlyRent || '',
+      ownerId: user.id,
+      ownerName: user.name,
+      tenantId: '',
+      tenantName: '',
+      tenantEmail: '',
+      tenantPhone: '',
+      managerId: role === 'manager' ? user.id : '',
+      managerName: role === 'manager' ? user.name : '',
+      createdAt: new Date().toISOString(),
+    }))
+}
+
+async function sendOtpEmail({ to, subject, intro, otp }) {
+  await sendEmail({
+    to,
+    subject,
+    text: `${intro} ${otp}. This code expires in 10 minutes.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+        <h2>${subject}</h2>
+        <p>${intro}</p>
+        <p style="font-size: 24px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+        <p>This code expires in 10 minutes.</p>
+      </div>
+    `,
+  })
 }
 
 async function sendTicketEmails({ recipients, ticket, property, eventType }) {
@@ -126,7 +180,7 @@ async function handleRoute(request, { params }) {
     if (route === '/' && method === 'GET') return ok({ message: 'GRTR Homes API' })
 
     /* ---------- AUTH ---------- */
-    if (route === '/auth/register' && method === 'POST') {
+    if ((route === '/auth/register' || route === '/app-auth/register') && method === 'POST') {
       const b = await request.json()
       const normalizedEmail = normalizeEmail(b.email)
       const authMethod = b.authMethod === 'google' ? 'google' : 'email-password'
@@ -136,28 +190,133 @@ async function handleRoute(request, { params }) {
       if (authMethod === 'google' && !isGoogleMailAccount(normalizedEmail)) return err('Continue with Google requires a Gmail account')
       const existing = await db.collection('users').findOne({ email: normalizedEmail })
       if (existing) return err('Email already registered')
-      const user = buildUserRegistrationDocument({ ...b, email: normalizedEmail, authMethod }, uuidv4())
+
+      if (authMethod === 'email-password') {
+        const passwordValidation = validatePasswordSecurity(b.password)
+        if (!passwordValidation.valid) return err(passwordValidation.message)
+
+        if (!isMailConfigured()) {
+          const hashedPassword = await hashPassword(b.password)
+          const user = buildUserRegistrationDocument({
+            ...b,
+            email: normalizedEmail,
+            password: hashedPassword,
+            authMethod,
+            emailVerified: true,
+            emailVerifiedAt: new Date().toISOString(),
+          }, uuidv4())
+
+          user.password = hashedPassword
+          user.emailVerified = true
+          user.emailVerifiedAt = new Date().toISOString()
+
+          await db.collection('users').insertOne(user)
+
+          if ((user.role === 'owner' || user.role === 'manager') && Array.isArray(user.profile?.properties)) {
+            const propertyDocs = buildPropertyDocumentsForUser(user, user.role, user.profile.properties)
+            if (propertyDocs.length) {
+              await db.collection('properties').insertMany(propertyDocs)
+            }
+          }
+
+          return ok({
+            user: clean(user),
+            warning: 'SMTP not configured. Account created without email verification OTP.',
+          })
+        }
+
+        const verificationCode = String(b.verificationCode || '').trim()
+        const pendingCollection = db.collection('pending_registrations')
+
+        if (!verificationCode) {
+          const otp = generateOtp()
+          const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+          const passwordHash = await hashPassword(b.password)
+
+          await pendingCollection.updateOne(
+            { email: normalizedEmail },
+            {
+              $set: {
+                email: normalizedEmail,
+                name: b.name,
+                phone: b.phone || '',
+                role: b.role,
+                profile: b.profile || {},
+                authMethod,
+                passwordHash,
+                verificationOtpHash: hashOtp(otp),
+                verificationOtpExpiresAt: expiresAt,
+                verificationOtpRequestedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+              $setOnInsert: {
+                id: uuidv4(),
+                createdAt: new Date().toISOString(),
+              },
+            },
+            { upsert: true },
+          )
+
+          await sendOtpEmail({
+            to: normalizedEmail,
+            subject: 'Verify your GRTR Homes email',
+            intro: 'Use this code to verify your email address and finish creating your account.',
+            otp,
+          })
+
+          return ok({
+            verificationRequired: true,
+            message: 'Verification code sent. Enter the 6-digit code to complete registration.',
+          }, 202)
+        }
+
+        const pendingRegistration = await pendingCollection.findOne({ email: normalizedEmail })
+        if (!pendingRegistration) return err('No pending registration found. Request a new verification code.', 404)
+        if (isOtpExpired(pendingRegistration.verificationOtpExpiresAt)) {
+          return err('Verification code expired. Request a new code and try again.', 401)
+        }
+        if (pendingRegistration.verificationOtpHash !== hashOtp(verificationCode)) {
+          return err('Verification code is incorrect.', 401)
+        }
+
+        const user = buildUserRegistrationDocument({
+          ...pendingRegistration,
+          email: normalizedEmail,
+          password: pendingRegistration.passwordHash,
+          authMethod,
+          emailVerified: true,
+          emailVerifiedAt: new Date().toISOString(),
+        }, uuidv4())
+
+        user.password = pendingRegistration.passwordHash
+        user.emailVerified = true
+        user.emailVerifiedAt = new Date().toISOString()
+
+        await db.collection('users').insertOne(user)
+        await pendingCollection.deleteOne({ email: normalizedEmail })
+
+        if ((user.role === 'owner' || user.role === 'manager') && Array.isArray(user.profile?.properties)) {
+          const propertyDocs = buildPropertyDocumentsForUser(user, user.role, user.profile.properties)
+          if (propertyDocs.length) {
+            await db.collection('properties').insertMany(propertyDocs)
+          }
+        }
+
+        return ok({ user: clean(user) })
+      }
+
+      const user = buildUserRegistrationDocument({
+        ...b,
+        email: normalizedEmail,
+        authMethod,
+        emailVerified: true,
+        emailVerifiedAt: new Date().toISOString(),
+      }, uuidv4())
+      user.emailVerified = true
+      user.emailVerifiedAt = new Date().toISOString()
       await db.collection('users').insertOne(user)
       if ((b.role === 'owner' || b.role === 'manager') && Array.isArray(b.profile?.properties)) {
-        const propertyDocs = b.profile.properties
-          .filter(Boolean)
-          .map((property, index) => ({
-            id: uuidv4(),
-            name: property.name || `Property ${index + 1}`,
-            address: property.address || '',
-            image: property.image || '',
-            description: property.description || '',
-            monthlyRent: property.monthlyRent || '',
-            ownerId: user.id,
-            ownerName: user.name,
-            tenantId: '',
-            tenantName: '',
-            tenantEmail: '',
-            tenantPhone: '',
-            managerId: b.role === 'manager' ? user.id : '',
-            managerName: b.role === 'manager' ? user.name : '',
-            createdAt: new Date().toISOString(),
-          }))
+        const propertyDocs = buildPropertyDocumentsForUser(user, b.role, b.profile.properties)
         if (propertyDocs.length) {
           await db.collection('properties').insertMany(propertyDocs)
         }
@@ -165,11 +324,11 @@ async function handleRoute(request, { params }) {
       return ok({ user: clean(user) })
     }
 
-    if (route === '/auth/login' && method === 'POST') {
+    if ((route === '/auth/login' || route === '/app-auth/login') && method === 'POST') {
       const b = await request.json()
       const normalizedEmail = normalizeEmail(b.email)
       const authMethod = b.authMethod === 'google' ? 'google' : 'email-password'
-      if (!isValidEmail(normalizedEmail)) return err('Please use a real email address', 401)
+      if (!isValidEmail(normalizedEmail, { enforceRealAddress: false })) return err('Please enter a valid email address', 401)
       if (authMethod === 'google') {
         if (!isGoogleMailAccount(normalizedEmail)) return err('Continue with Google requires a Gmail account', 401)
         const user = await db.collection('users').findOne({ email: normalizedEmail })
@@ -177,12 +336,29 @@ async function handleRoute(request, { params }) {
         if (user.authMethod && user.authMethod !== 'google') return err('This account uses email and password sign-in', 401)
         return ok({ user: clean({ ...user, authMethod: 'google' }) })
       }
-      const user = await db.collection('users').findOne({ email: normalizedEmail, password: b.password })
+      const user = await db.collection('users').findOne({ email: normalizedEmail })
       if (!user) return err('Invalid email or password', 401)
+      if (!b.password) return err('Password is required', 401)
+      const passwordOk = await verifyPassword(user.password, b.password)
+      if (!passwordOk) return err('Invalid email or password', 401)
+
+      // Temporary compatibility: auto-mark legacy accounts verified on successful login.
+      if (user.emailVerified !== true) {
+        await db.collection('users').updateOne(
+          { id: user.id },
+          {
+            $set: {
+              emailVerified: true,
+              emailVerifiedAt: user.emailVerifiedAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        )
+      }
       return ok({ user: clean(user) })
     }
 
-    if (route === '/auth/delete-account' && method === 'POST') {
+    if ((route === '/auth/delete-account' || route === '/app-auth/delete-account') && method === 'POST') {
       const b = await request.json()
       const normalizedEmail = normalizeEmail(b.email)
       if (!normalizedEmail || !b.userId) return err('userId and email required')
@@ -194,13 +370,18 @@ async function handleRoute(request, { params }) {
       if (b.verificationMethod === 'otp') {
         const otp = String(b.otp || '').trim()
         if (!otp) return err('OTP is required to delete this account')
-        if (!user.deleteAccountOtpCode || !user.deleteAccountOtpExpiresAt) return err('No active deletion OTP found', 401)
-        if (new Date(user.deleteAccountOtpExpiresAt).getTime() < Date.now()) return err('Your deletion OTP has expired', 401)
-        if (user.deleteAccountOtpCode !== otp) return err('The deletion OTP is incorrect', 401)
+        if ((!user.deleteAccountOtpHash && !user.deleteAccountOtpCode) || !user.deleteAccountOtpExpiresAt) return err('No active deletion OTP found', 401)
+        if (isOtpExpired(user.deleteAccountOtpExpiresAt)) return err('Your deletion OTP has expired', 401)
+        const hashedInputOtp = hashOtp(otp)
+        const otpMatches = user.deleteAccountOtpHash
+          ? user.deleteAccountOtpHash === hashedInputOtp
+          : user.deleteAccountOtpCode === otp
+        if (!otpMatches) return err('The deletion OTP is incorrect', 401)
       } else {
         if (!user.password) return err('This account must be verified with an emailed OTP before deletion', 400)
         if (!b.currentPassword) return err('Current password is required to delete this account', 401)
-        if (user.password !== b.currentPassword) return err('Current password is incorrect', 401)
+        const isCurrentPasswordValid = await verifyPassword(user.password, b.currentPassword)
+        if (!isCurrentPasswordValid) return err('Current password is incorrect', 401)
       }
       const targets = getAccountDeletionTargets(user)
       await db.collection('users').deleteOne({ id: user.id })
@@ -209,10 +390,24 @@ async function handleRoute(request, { params }) {
         $set: { tenantId: '', tenantName: '', tenantEmail: '', tenantPhone: '' },
       })
       await db.collection('tickets').deleteMany(targets.ticketQuery)
+      if (isMailConfigured()) {
+        await sendEmail({
+          to: targets.email,
+          subject: 'Your GRTR Homes account was deleted',
+          text: 'Your account has been permanently deleted. If this was not you, contact support immediately.',
+          html: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+              <h2>Account deleted</h2>
+              <p>Your GRTR Homes account has been permanently deleted.</p>
+              <p>If this action was not requested by you, contact support immediately.</p>
+            </div>
+          `,
+        }).catch(() => {})
+      }
       return ok({ deleted: true, email: targets.email })
     }
 
-    if (route === '/auth/delete-account/request-otp' && method === 'POST') {
+    if ((route === '/auth/delete-account/request-otp' || route === '/app-auth/delete-account/request-otp') && method === 'POST') {
       const b = await request.json()
       const normalizedEmail = normalizeEmail(b.email)
       if (!normalizedEmail || !b.userId) return err('userId and email required')
@@ -221,54 +416,132 @@ async function handleRoute(request, { params }) {
       if (!user) return err('Account not found', 404)
       if (normalizeEmail(user.email) !== normalizedEmail) return err('Account verification failed', 403)
 
-      const otp = String(randomInt(0, 1000000)).padStart(6, '0')
+      const otp = generateOtp()
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
       await db.collection('users').updateOne(
         { id: user.id },
         {
           $set: {
-            deleteAccountOtpCode: otp,
+            deleteAccountOtpHash: hashOtp(otp),
             deleteAccountOtpExpiresAt: expiresAt,
             deleteAccountOtpRequestedAt: new Date().toISOString(),
+          },
+          $unset: {
+            deleteAccountOtpCode: '',
           },
         },
       )
 
-      await sendEmail({
+      await sendOtpEmail({
         to: normalizedEmail,
         subject: 'GRTR Homes account deletion verification code',
-        text: `Use this code to confirm deletion of your GRTR Homes account: ${otp}. This code expires in 10 minutes.`,
-        html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
-            <h2>Confirm account deletion</h2>
-            <p>Use this code to confirm deletion of your GRTR Homes account.</p>
-            <p style="font-size: 24px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
-            <p>This code expires in 10 minutes.</p>
-          </div>
-        `,
+        intro: 'Use this code to confirm deletion of your GRTR Homes account.',
+        otp,
       })
 
       return ok({ message: 'A deletion verification code has been sent to your email address.' })
     }
 
-    if (route === '/auth/forgot-password' && method === 'POST') {
+    if ((route === '/auth/forgot-password' || route === '/app-auth/forgot-password') && method === 'POST') {
       const b = await request.json()
-      if (!b.email) return err('email required')
-      const user = await db.collection('users').findOne({ email: b.email })
-      if (user) {
-        await db.collection('users').updateOne({ id: user.id }, { $set: { passwordResetRequestedAt: new Date().toISOString() } })
+      const normalizedEmail = normalizeEmail(b.email)
+      if (!normalizedEmail) return err('email required')
+
+      const user = await db.collection('users').findOne({ email: normalizedEmail })
+      if (user && user.password) {
+        const otp = generateOtp()
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+
+        await db.collection('users').updateOne(
+          { id: user.id },
+          {
+            $set: {
+              resetPasswordOtpHash: hashOtp(otp),
+              resetPasswordOtpExpiresAt: expiresAt,
+              resetPasswordOtpRequestedAt: new Date().toISOString(),
+            },
+          },
+        )
+
+        if (isMailConfigured()) {
+          await sendOtpEmail({
+            to: normalizedEmail,
+            subject: 'GRTR Homes password reset code',
+            intro: 'Use this code to reset your GRTR Homes account password.',
+            otp,
+          })
+        }
       }
-      return ok({ message: 'If an account exists, reset instructions have been prepared.' })
+
+      return ok({ message: 'If an account exists, a password reset code has been sent.' })
     }
 
-    if (route === '/auth/change-password' && method === 'POST') {
+    if ((route === '/auth/reset-password' || route === '/app-auth/reset-password') && method === 'POST') {
       const b = await request.json()
-      if (!b.email || !b.currentPassword || !b.newPassword) return err('email, currentPassword, newPassword required')
-      if (b.newPassword.length < 6) return err('Password must be at least 6 characters')
-      const user = await db.collection('users').findOne({ email: b.email })
-      if (!user || user.password !== b.currentPassword) return err('Current password is incorrect', 401)
-      await db.collection('users').updateOne({ id: user.id }, { $set: { password: b.newPassword, updatedAt: new Date().toISOString() } })
+      const normalizedEmail = normalizeEmail(b.email)
+      const otp = String(b.otp || '').trim()
+      if (!normalizedEmail || !otp || !b.newPassword) {
+        return err('email, otp, newPassword required')
+      }
+
+      const passwordValidation = validatePasswordSecurity(b.newPassword)
+      if (!passwordValidation.valid) return err(passwordValidation.message)
+
+      const user = await db.collection('users').findOne({ email: normalizedEmail })
+      if (!user || !user.resetPasswordOtpHash || !user.resetPasswordOtpExpiresAt) {
+        return err('Invalid reset request', 401)
+      }
+      if (isOtpExpired(user.resetPasswordOtpExpiresAt)) {
+        return err('Your reset code has expired', 401)
+      }
+      if (user.resetPasswordOtpHash !== hashOtp(otp)) {
+        return err('The reset code is incorrect', 401)
+      }
+
+      const newPasswordMatchesCurrent = await verifyPassword(user.password, b.newPassword)
+      if (newPasswordMatchesCurrent) {
+        return err('New password must be different from your current password')
+      }
+
+      const hashedPassword = await hashPassword(b.newPassword)
+      await db.collection('users').updateOne(
+        { id: user.id },
+        {
+          $set: {
+            password: hashedPassword,
+            updatedAt: new Date().toISOString(),
+          },
+          $unset: {
+            resetPasswordOtpHash: '',
+            resetPasswordOtpExpiresAt: '',
+            resetPasswordOtpRequestedAt: '',
+          },
+        },
+      )
+
+      return ok({ message: 'Password reset successfully' })
+    }
+
+    if ((route === '/auth/change-password' || route === '/app-auth/change-password') && method === 'POST') {
+      const b = await request.json()
+      const normalizedEmail = normalizeEmail(b.email)
+      if (!normalizedEmail || !b.currentPassword || !b.newPassword) return err('email, currentPassword, newPassword required')
+
+      const passwordValidation = validatePasswordSecurity(b.newPassword)
+      if (!passwordValidation.valid) return err(passwordValidation.message)
+
+      const user = await db.collection('users').findOne({ email: normalizedEmail })
+      if (!user) return err('Current password is incorrect', 401)
+
+      const currentPasswordValid = await verifyPassword(user.password, b.currentPassword)
+      if (!currentPasswordValid) return err('Current password is incorrect', 401)
+
+      const newPasswordMatchesCurrent = await verifyPassword(user.password, b.newPassword)
+      if (newPasswordMatchesCurrent) return err('New password must be different from your current password')
+
+      const hashedPassword = await hashPassword(b.newPassword)
+      await db.collection('users').updateOne({ id: user.id }, { $set: { password: hashedPassword, updatedAt: new Date().toISOString() } })
       return ok({ message: 'Password updated successfully' })
     }
 
@@ -356,6 +629,10 @@ async function handleRoute(request, { params }) {
       const property = await db.collection('properties').findOne({ id: b.propertyId })
       if (!property) return err('Property not found', 404)
       const { owner, manager, recipients } = await resolveTicketRecipients(db, property, b)
+      const ownerManagerRecipients = recipients.filter((recipient) => recipient.role === 'owner' || recipient.role === 'manager')
+      if (!ownerManagerRecipients.length) {
+        return err('Ticket cannot be raised because no valid owner or manager email is available for notifications.', 422)
+      }
       const ownerEmail = normalizeEmail(property?.ownerEmail || owner?.email || b.ownerEmail || '')
       const managerEmail = normalizeEmail(property?.managerEmail || manager?.email || b.managerEmail || '')
       const t = {
@@ -367,7 +644,7 @@ async function handleRoute(request, { params }) {
         notifications: [],
       }
       await db.collection('tickets').insertOne(t)
-      const notifications = await sendTicketEmails({ recipients: recipients.filter((recipient) => recipient.role !== 'tenant'), ticket: t, property, eventType: 'created' })
+      const notifications = await sendTicketEmails({ recipients: ownerManagerRecipients, ticket: t, property, eventType: 'created' })
       await db.collection('tickets').updateOne(
         { id: t.id },
         {

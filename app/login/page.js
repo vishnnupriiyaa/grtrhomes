@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { signIn } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,42 +34,10 @@ const LoginPage = () => {
   useEffect(() => {
     const error = new URLSearchParams(window.location.search).get('error')
     if (!error) return
-
-    const messages = {
-      'social-account-not-allowed': 'Continue with Google only works with verified Google account emails.',
-      'social-account-not-registered': 'No portal account could be created for this Google account. Please try again.',
-      AccessDenied: 'Google sign-in was denied. Use a verified Google account linked to your portal access.',
-      OAuthAccountNotLinked: 'This Google account is not linked for sign-in here.',
-      Configuration: 'Social sign-in is not configured yet. Add the Auth0 environment variables.',
-    }
-
-    toast.error(messages[error] || 'Google sign-in failed. Please try again.')
+    toast.error(error || 'An error occurred')
   }, [])
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true)
-    try {
-      const result = await signIn('auth0', {
-        callbackUrl: '/dashboard',
-        redirect: false,
-      })
 
-      if (!result?.url || result.error) {
-        const nextAuthError = result?.error || 'Configuration'
-        throw new Error(nextAuthError)
-      }
-
-      window.location.assign(result.url)
-    } catch (err) {
-      const messageMap = {
-        Configuration: 'Social sign-in is not configured yet. Add the Auth0 environment variables.',
-        OAuthSignin: 'Unable to connect to Google sign-in provider. Please try again.',
-        AccessDenied: 'Google sign-in was denied. Use a verified Google account linked to your portal access.',
-      }
-      toast.error(messageMap[err.message] || err.message || 'Unable to start Google sign-in')
-      setLoading(false)
-    }
-  }
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -337,14 +304,7 @@ const LoginPage = () => {
                     </div>
                   )}
                   <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : 'Sign in'}</Button>
-                  <div className="relative py-1">
-                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or continue with</span></div>
-                  </div>
-                  <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
-                    <p className="text-sm text-muted-foreground">Use your verified Google account to continue.</p>
-                    <Button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full rounded-full">{loading ? 'Redirecting...' : 'Continue with Google'}</Button>
-                  </div>
+
                 </form>
               </TabsContent>
               <TabsContent value="register" className="mt-6">
@@ -468,14 +428,6 @@ const LoginPage = () => {
                   </div>
 
                   <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? (pendingRegistration ? 'Verifying...' : 'Creating...') : (pendingRegistration ? 'Verify & create account' : 'Create account')}</Button>
-                  <div className="relative py-1">
-                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or continue with</span></div>
-                  </div>
-                  <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
-                    <p className="text-sm text-muted-foreground">Continue with Google to create or access your account faster.</p>
-                    <Button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full rounded-full">{loading ? 'Redirecting...' : 'Continue with Google'}</Button>
-                  </div>
                 </form>
               </TabsContent>
             </Tabs>
