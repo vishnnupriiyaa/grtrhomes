@@ -19,13 +19,17 @@ const LoginPage = () => {
   const [tab, setTab] = useState('login')
   const [loading, setLoading] = useState(false)
 
-  const [loginForm, setLoginForm] = useState({ email: '', password: '', authMethod: 'email-password' })
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [regForm, setRegForm] = useState({ name: '', email: '', password: '', phone: '', role: 'tenant' })
   const [profileForm, setProfileForm] = useState(() => getRoleProfileFields('tenant'))
   const [recoveryMode, setRecoveryMode] = useState('none')
   const [recoveryEmail, setRecoveryEmail] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [resetOtp, setResetOtp] = useState('')
+  const [forgotOtpSent, setForgotOtpSent] = useState(false)
+  const [registerVerificationCode, setRegisterVerificationCode] = useState('')
+  const [pendingRegistration, setPendingRegistration] = useState(null)
   const [recoveryLoading, setRecoveryLoading] = useState(false)
 
   useEffect(() => {
@@ -33,9 +37,9 @@ const LoginPage = () => {
     if (!error) return
 
     const messages = {
-      'social-account-not-allowed': 'Continue with Google only works with verified Gmail accounts.',
+      'social-account-not-allowed': 'Continue with Google only works with verified Google account emails.',
       'social-account-not-registered': 'No portal account could be created for this Google account. Please try again.',
-      AccessDenied: 'Google sign-in was denied. Use a verified Gmail account linked to your portal access.',
+      AccessDenied: 'Google sign-in was denied. Use a verified Google account linked to your portal access.',
       OAuthAccountNotLinked: 'This Google account is not linked for sign-in here.',
       Configuration: 'Social sign-in is not configured yet. Add the Auth0 environment variables.',
     }
@@ -46,29 +50,40 @@ const LoginPage = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true)
     try {
-      await signIn('auth0', { callbackUrl: '/dashboard' })
+      const result = await signIn('auth0', {
+        callbackUrl: '/dashboard',
+        redirect: false,
+      })
+
+      if (!result?.url || result.error) {
+        const nextAuthError = result?.error || 'Configuration'
+        throw new Error(nextAuthError)
+      }
+
+      window.location.assign(result.url)
     } catch (err) {
-      toast.error(err.message || 'Unable to start Google sign-in')
+      const messageMap = {
+        Configuration: 'Social sign-in is not configured yet. Add the Auth0 environment variables.',
+        OAuthSignin: 'Unable to connect to Google sign-in provider. Please try again.',
+        AccessDenied: 'Google sign-in was denied. Use a verified Google account linked to your portal access.',
+      }
+      toast.error(messageMap[err.message] || err.message || 'Unable to start Google sign-in')
       setLoading(false)
     }
   }
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    if (loginForm.authMethod === 'google') {
-      await handleGoogleSignIn()
-      return
-    }
     const normalizedEmail = normalizeEmail(loginForm.email)
-    if (!isValidEmail(normalizedEmail)) {
-      toast.error('Please use a real email address to sign in.')
+    if (!isValidEmail(normalizedEmail, { enforceRealAddress: false })) {
+      toast.error('Please enter a valid email address to sign in.')
       return
     }
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/app-auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...loginForm, email: normalizedEmail }),
+        body: JSON.stringify({ email: normalizedEmail, password: loginForm.password, authMethod: 'email-password' }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Login failed')
@@ -86,26 +101,37 @@ const LoginPage = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      const normalizedEmail = normalizeEmail(regForm.email)
+      const sourcePayload = pendingRegistration || {
+        ...regForm,
+        profile: profileForm,
+        authMethod: 'email-password',
+      }
+      const normalizedEmail = normalizeEmail(sourcePayload.email)
       if (!isValidEmail(normalizedEmail)) {
         toast.error('Please use a real email address for registration.')
         setLoading(false)
         return
       }
       const payload = {
-        ...regForm,
+        ...sourcePayload,
         email: normalizedEmail,
-        profile: profileForm,
-        authMethod: 'email-password',
+        verificationCode: pendingRegistration ? registerVerificationCode : undefined,
       }
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('/api/app-auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       const data = await res.json()
+      if (res.status === 202 && data.verificationRequired) {
+        setPendingRegistration({ ...sourcePayload, email: normalizedEmail })
+        toast.success(data.message || 'Verification code sent to your email.')
+        return
+      }
       if (!res.ok) throw new Error(data.error || 'Registration failed')
       localStorage.setItem('grtr_user', JSON.stringify(data.user))
       toast.success('Account created!')
+      setPendingRegistration(null)
+      setRegisterVerificationCode('')
       router.push('/dashboard')
     } catch (err) {
       toast.error(err.message)
@@ -153,14 +179,42 @@ const LoginPage = () => {
     e.preventDefault()
     setRecoveryLoading(true)
     try {
-      const res = await fetch('/api/auth/forgot-password', {
+      const normalizedEmail = normalizeEmail(recoveryEmail)
+      if (!isValidEmail(normalizedEmail, { enforceRealAddress: false })) {
+        throw new Error('Please use a valid email address.')
+      }
+      const res = await fetch('/api/app-auth/forgot-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: recoveryEmail }),
+        body: JSON.stringify({ email: normalizedEmail }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Unable to process password reset')
-      toast.success(data.message || 'If an account exists, reset instructions are ready.')
+      toast.success(data.message || 'If an account exists, a reset code has been sent.')
+      setRecoveryEmail(normalizedEmail)
+      setForgotOtpSent(true)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+    setRecoveryLoading(true)
+    try {
+      const normalizedEmail = normalizeEmail(recoveryEmail)
+      const res = await fetch('/api/app-auth/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, otp: resetOtp, newPassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to reset password')
+      toast.success(data.message || 'Password reset successfully')
       setRecoveryEmail('')
+      setResetOtp('')
+      setNewPassword('')
+      setForgotOtpSent(false)
       setRecoveryMode('none')
     } catch (err) {
       toast.error(err.message)
@@ -173,9 +227,10 @@ const LoginPage = () => {
     e.preventDefault()
     setRecoveryLoading(true)
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const normalizedEmail = normalizeEmail(recoveryEmail)
+      const res = await fetch('/api/app-auth/change-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: recoveryEmail, currentPassword, newPassword }),
+        body: JSON.stringify({ email: normalizedEmail, currentPassword, newPassword }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Unable to change password')
@@ -183,6 +238,8 @@ const LoginPage = () => {
       setRecoveryEmail('')
       setCurrentPassword('')
       setNewPassword('')
+      setResetOtp('')
+      setForgotOtpSent(false)
       setRecoveryMode('none')
     } catch (err) {
       toast.error(err.message)
@@ -220,73 +277,74 @@ const LoginPage = () => {
               <TabsContent value="login" className="mt-6">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
-                    <Label>Sign in with</Label>
-                    <Select value={loginForm.authMethod} onValueChange={(value) => setLoginForm({ ...loginForm, authMethod: value })}>
-                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="email-password">Email & password</SelectItem>
-                        <SelectItem value="google">Google</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Email</Label>
+                    <Input type="email" required value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className="mt-1.5" placeholder="you@example.com" />
                   </div>
-                  {loginForm.authMethod === 'email-password' ? (
-                    <>
-                      <div>
-                        <Label>Email</Label>
-                        <Input type="email" required value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className="mt-1.5" placeholder="you@example.com" />
-                      </div>
-                      <div>
-                        <Label>Password</Label>
-                        <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
-                      </div>
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <button type="button" onClick={() => { setRecoveryMode('forgot'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Forgot password?</button>
-                        <button type="button" onClick={() => { setRecoveryMode('change'); setRecoveryEmail(loginForm.email) }} className="text-primary hover:underline">Change password</button>
-                      </div>
-                      {recoveryMode !== 'none' && (
-                        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
-                          <p className="text-sm font-medium">{recoveryMode === 'forgot' ? 'Reset your password' : 'Update your password'}</p>
-                          {recoveryMode === 'forgot' ? (
-                            <form onSubmit={handleForgotPassword} className="space-y-3">
+                  <div>
+                    <Label>Password</Label>
+                    <Input type="password" required value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className="mt-1.5" placeholder="••••••••" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <button type="button" onClick={() => { setRecoveryMode('forgot'); setRecoveryEmail(loginForm.email); setForgotOtpSent(false); setResetOtp(''); setNewPassword('') }} className="text-primary hover:underline">Forgot password?</button>
+                    <button type="button" onClick={() => { setRecoveryMode('change'); setRecoveryEmail(loginForm.email); setForgotOtpSent(false); setResetOtp('') }} className="text-primary hover:underline">Change password</button>
+                  </div>
+                  {recoveryMode !== 'none' && (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                      <p className="text-sm font-medium">{recoveryMode === 'forgot' ? 'Reset your password' : 'Update your password'}</p>
+                      {recoveryMode === 'forgot' ? (
+                        <div className="space-y-3">
+                          <div>
+                            <Label>Email</Label>
+                            <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
+                          </div>
+                          {forgotOtpSent && (
+                            <>
                               <div>
-                                <Label>Email</Label>
-                                <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
-                              </div>
-                              <div className="flex gap-2">
-                                <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
-                                <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Working...' : 'Send reset'}</Button>
-                              </div>
-                            </form>
-                          ) : (
-                            <form onSubmit={handleChangePassword} className="space-y-3">
-                              <div>
-                                <Label>Email</Label>
-                                <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
-                              </div>
-                              <div>
-                                <Label>Current password</Label>
-                                <Input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                                <Label>Reset code</Label>
+                                <Input required value={resetOtp} onChange={(e) => setResetOtp(e.target.value)} className="mt-1.5" placeholder="Enter the 6-digit code" />
                               </div>
                               <div>
                                 <Label>New password</Label>
-                                <Input type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                                <Input type="password" required minLength={4} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1.5" placeholder="At least 4 chars, include letters + numbers" />
                               </div>
-                              <div className="flex gap-2">
-                                <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
-                                <Button type="submit" disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Updating...' : 'Change password'}</Button>
-                              </div>
-                            </form>
+                            </>
                           )}
+                          <div className="flex gap-2">
+                            <Button type="button" variant="outline" className="flex-1" onClick={() => { setRecoveryMode('none'); setForgotOtpSent(false); setResetOtp(''); setNewPassword('') }}>Cancel</Button>
+                            <Button type="button" onClick={forgotOtpSent ? handleResetPassword : handleForgotPassword} disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Working...' : forgotOtpSent ? 'Reset password' : 'Send reset code'}</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <Label>Email</Label>
+                            <Input type="email" required value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} className="mt-1.5" placeholder="you@example.com" />
+                          </div>
+                          <div>
+                            <Label>Current password</Label>
+                            <Input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="mt-1.5" placeholder="••••••••" />
+                          </div>
+                          <div>
+                            <Label>New password</Label>
+                            <Input type="password" required minLength={4} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1.5" placeholder="At least 4 chars, include letters + numbers" />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button type="button" variant="outline" className="flex-1" onClick={() => setRecoveryMode('none')}>Cancel</Button>
+                            <Button type="button" onClick={handleChangePassword} disabled={recoveryLoading} className="flex-1">{recoveryLoading ? 'Updating...' : 'Change password'}</Button>
+                          </div>
                         </div>
                       )}
-                      <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : 'Sign in'}</Button>
-                    </>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-4">
-                      <p className="text-sm text-muted-foreground">Use your verified Gmail account to continue. If that Gmail address is already registered for a portal account, you will be signed in automatically.</p>
-                      <Button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full rounded-full">{loading ? 'Redirecting...' : 'Continue with Google'}</Button>
                     </div>
                   )}
+                  <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Signing in...' : 'Sign in'}</Button>
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or continue with</span></div>
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                    <p className="text-sm text-muted-foreground">Use your verified Google account to continue.</p>
+                    <Button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full rounded-full">{loading ? 'Redirecting...' : 'Continue with Google'}</Button>
+                  </div>
                 </form>
               </TabsContent>
               <TabsContent value="register" className="mt-6">
@@ -305,8 +363,18 @@ const LoginPage = () => {
                   </div>
                   <div>
                     <Label>Password</Label>
-                    <Input type="password" required minLength={6} value={regForm.password} onChange={(e) => setRegForm({ ...regForm, password: e.target.value })} className="mt-1.5" />
+                    <Input type="password" required minLength={4} value={regForm.password} onChange={(e) => setRegForm({ ...regForm, password: e.target.value })} className="mt-1.5" placeholder="At least 4 chars, include letters + numbers" />
                   </div>
+                  {pendingRegistration && (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                      <p className="text-sm font-medium">Email verification required</p>
+                      <p className="text-xs text-muted-foreground">We sent a 6-digit code to {pendingRegistration.email}. Enter it to complete account creation.</p>
+                      <div>
+                        <Label>Verification code</Label>
+                        <Input required value={registerVerificationCode} onChange={(e) => setRegisterVerificationCode(e.target.value)} className="mt-1.5" placeholder="Enter 6-digit code" />
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <Label>I am a...</Label>
                     <Select value={regForm.role} onValueChange={handleRoleChange}>
@@ -399,7 +467,15 @@ const LoginPage = () => {
                     )}
                   </div>
 
-                  <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? 'Creating...' : 'Create account'}</Button>
+                  <Button type="submit" disabled={loading} className="w-full rounded-full">{loading ? (pendingRegistration ? 'Verifying...' : 'Creating...') : (pendingRegistration ? 'Verify & create account' : 'Create account')}</Button>
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or continue with</span></div>
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                    <p className="text-sm text-muted-foreground">Continue with Google to create or access your account faster.</p>
+                    <Button type="button" onClick={handleGoogleSignIn} disabled={loading} className="w-full rounded-full">{loading ? 'Redirecting...' : 'Continue with Google'}</Button>
+                  </div>
                 </form>
               </TabsContent>
             </Tabs>
